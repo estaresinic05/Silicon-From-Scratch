@@ -10,7 +10,7 @@ The processor follows a **Harvard architecture** with separate instruction and d
 
 ### System Architecture Diagram
 
-![Single-Cycle CPU Architecture](docs/architecture.jpg)
+![Single-Cycle CPU Architecture](docs/sc-cpu-architecture.jpg)
 
 ### Supported Instructions
 
