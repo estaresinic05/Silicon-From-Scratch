@@ -1,5 +1,5 @@
 /*******************************************************
- * Project:        RISC-V CPU Design
+ * Project:        ALU Design
  * Module:         4x1 Multiplexer
  * Author:         Elliot Staresinic
  * Date:           2026-04-29
