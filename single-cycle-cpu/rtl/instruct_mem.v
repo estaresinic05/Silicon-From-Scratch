@@ -1,5 +1,5 @@
 /*******************************************************
- * Project:        RISC-V CPU Design
+ * Project:        RISC-V Single Cycle Design
  * Module:         32-bit Read-Only Instruction Memory
  * Author:         Elliot Staresinic
  * Date:           2026-05-23
