@@ -1,5 +1,5 @@
 /*******************************************************
- * Project:        RISC-V CPU Design
+ * Project:        RISC-V Single Cycle CPU Design
  * Module:         ALU Full
  * Author:         Elliot Staresinic
  * Date:           2026-05-19
