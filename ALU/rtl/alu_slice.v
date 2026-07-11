@@ -1,5 +1,5 @@
 /*******************************************************
- * Project:        RISC-V CPU Design
+ * Project:        ALU Design
  * Module:         ALU Slice
  * Author:         Elliot Staresinic
  * Date:           2026-05-19
