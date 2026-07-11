@@ -1,5 +1,5 @@
 /*******************************************************
- * Project:        RISC-V CPU Design
+ * Project:        ALU Design
  * Module:         Full Adder
  * Author:         Elliot Staresinic
  * Date:           2026-04-29
