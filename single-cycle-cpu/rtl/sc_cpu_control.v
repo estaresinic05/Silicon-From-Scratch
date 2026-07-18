@@ -61,28 +61,28 @@ module sc_cpu_control (
       end
       7'b0100011: begin  // sw
         memWrite = 1'b1; // write word to memory
-        ALUOp = 2'b00;   //addition
+        ALUOp = 2'b00;   // addition
         ALUsrc = 1'b1;   // use immediate as offset
       end
       7'b1100011: begin
         case (funct3)
           3'b000: begin      // beq
             branch = 3'b100;
-            ALUOp  = 2'b01;  //subtraction
+            ALUOp  = 2'b01;  // subtraction
           end
           3'b001: begin      // bne
             branch = 3'b010;
-            ALUOp  = 2'b01;  //subtraction
+            ALUOp  = 2'b01;  // subtraction
           end
           3'b100: begin      // blt
             branch = 3'b001;
-            ALUOp  = 2'b10;  //determined by funct3/7
+            ALUOp  = 2'b10;  // determined by funct3/7
           end
           default: branch = 3'b000;
         endcase
       end
       7'b0110011: begin  // add, sub, and, or, slt
-        ALUOp = 2'b10;   //determined by funct3/7
+        ALUOp = 2'b10;   // determined by funct3/7
         regWrite = 1'b1;
       end
       7'b0010011: begin  // addi, andi, ori
