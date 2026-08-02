@@ -66,7 +66,7 @@ module sc_cpu_datapath (
 
   //instruction memory with 256 word depth
   instruct_mem #(256) instruction_memory (
-      .instAddress(pc),  //word alignment will be perfomed in data_mem module
+      .instAddress(pc),  //word alignment will be perfomed in instruct_mem module
       .instruction(fetchedInstr)
   );
 
