@@ -2,6 +2,8 @@
 
 A fully functional, single-cycle RV32I processor implemented in Verilog. Every stage of the classical datapath — fetch, decode, execute, memory, and write-back — completes within a single clock cycle. The design is verified by a self-checking testbench that runs a 30-instruction program and independently validates the result against a hand-derived oracle.
 
+It is also the baseline the [pipelined design](../pipelined-cpu/) is measured against. Both run the same program image, byte for byte, so their architectural results and their clock periods can be compared directly — see [below](#compared-with-the-pipelined-design).
+
 ---
 
 ## Architecture
@@ -95,6 +97,8 @@ single-cycle-cpu/
     ├── sc-cpu-architecture.jpg     Hand-drawn system architecture diagram
     └── design-verification-report  Full verification report (.docx and .pdf)
 ```
+
+The verification report in [`docs/`](docs/) is the long form of this section: methodology, the complete per-instruction execution trace, a functional coverage matrix, and the open coverage gaps.
 
 ---
 
@@ -247,6 +251,33 @@ A passing run produces:
 
 ![Simulation Waveform](waveforms/waveform.jpg)
 
+The defining property of the style is visible directly: 34 instructions retire in 34 clock cycles, one per cycle, with no gaps.
+
+---
+
+## Compared With the Pipelined Design
+
+The [pipelined CPU](../pipelined-cpu/) implements the same instruction subset and runs this exact program image. Both were synthesized to Nangate45 45 nm standard cells with yosys, with abc measuring the longest register-to-register path against an identical driver and load. The memories are blackboxed, and their access time is the only estimated input.
+
+|  | Single-cycle | Pipelined |
+|---|---|---|
+| Logic critical path | 2173 ps | 1813 ps |
+| + instruction memory | 700 ps | in IF |
+| + data memory | 600 ps | in MEM |
+| Clock period | 3473 ps | **1813 ps** |
+| Maximum frequency | 288 MHz | **552 MHz** |
+| Cell area | 10651 µm² | 14153 µm² (+33%) |
+| Cycles for the program | **34** | 48 |
+| **Runtime** | 118.1 ns | **87.0 ns** |
+
+This design wins on cycle count and loses on clock period, and the second effect is larger. The reason is where the memories sit: a single-cycle critical path crosses **both** of them inside one clock, while no pipeline stage crosses more than one. That is what the asymmetric memory addition in the table represents, and it is most of the 1.92x clock difference.
+
+The pipeline needed 1.41x — that is 48 / 34 — to break even on the extra cycles it spends stalling and flushing. It got 1.92x, so the same program finishes 1.36x sooner there for a third more silicon.
+
+Where this design does not lose is the architectural result: both end with identical register and memory contents. The pipelined testbench checks against the expected-state table above, unchanged, because pipelining must not change what the program computes.
+
+Both designs also share the same 992 flip-flops of register file after synthesis. This one adds 32 more for the program counter and nothing else has state; the pipelined design adds 357, of which 325 are pipeline register.
+
 ---
 
 ## Tools
@@ -256,6 +287,7 @@ A passing run produces:
 | Icarus Verilog 12.0 | RTL simulation |
 | GTKWave / EPWave | Waveform inspection |
 | GNU Make | Build automation |
+| yosys + abc, Nangate45 | Synthesis and critical-path measurement |
 
 ---
 
