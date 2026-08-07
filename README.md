@@ -22,7 +22,7 @@ The whole approach rests on one idea: **dive in.** You do not need a degree, an 
 
 Silicon From Scratch is a teaching site and a hardware repository, and they do different jobs.
 
-### 📘 The site — [siliconfromscratch.com](https://siliconfromscratch.com)
+### The site — [siliconfromscratch.com](https://siliconfromscratch.com)
 
 A structured course that builds the ideas up one layer at a time, with the parts that are hard to picture made interactive rather than described:
 
@@ -40,7 +40,7 @@ A structured course that builds the ideas up one layer at a time, with the parts
 | **Advanced — Pipelined CPU** | Pipelining · The Pipelined Datapath |
 | **Advanced — Physical Design** | Transistor Basics · Implementing Arbitrary Logic and Stick Diagrams |
 
-### ⚙️ This repository — the designs themselves
+### This repository — the designs themselves
 
 The working hardware the lessons are teaching you to build. Clone it, run it, break it, and read the verification that proves it works.
 
@@ -56,9 +56,26 @@ Work through these top to bottom.
 
 | Project | Level | Status | What you'll build and learn |
 |---------|-------|--------|-----------------------------|
-| [**ALU**](./ALU/) | Beginner — start here | ✅ Complete | A parameterized N-bit ripple-carry ALU (slice + MSB) supporting AND, OR, ADD, SUB, SLT, NOR and NAND. The single best place to understand how arithmetic and logic are actually done in hardware. Verified against a behavioral oracle. |
-| [**Single-Cycle CPU**](./single-cycle-cpu/) | Intermediate | ✅ Complete | A full RV32I single-cycle Harvard processor — datapath, control, register file and memory working together to run real RISC-V programs. Verified against a lockstep golden model *and* a hand-derived final-state oracle. |
-| [**Pipelined CPU**](./pipelined-cpu/) | Advanced | ✅ Complete | A five-stage RV32I pipeline with full forwarding, load-use and branch interlocks, and branch resolution in ID. The leap from "it works" to "it works *fast*". Verified against three independent oracles. |
+| [**ALU**](./ALU/) | Beginner — start here | Complete | A parameterized N-bit ripple-carry ALU (slice + MSB) supporting AND, OR, ADD, SUB, SLT, NOR and NAND. The single best place to understand how arithmetic and logic are actually done in hardware. Verified against a behavioral oracle. |
+| [**Single-Cycle CPU**](./single-cycle-cpu/) | Intermediate | Complete | A full RV32I single-cycle Harvard processor — datapath, control, register file and memory working together to run real RISC-V programs. Verified against a lockstep golden model *and* a hand-derived final-state oracle. |
+| [**Pipelined CPU**](./pipelined-cpu/) | Advanced | Complete | A five-stage RV32I pipeline with full forwarding, load-use and branch interlocks, and branch resolution in ID. The leap from "it works" to "it works *fast*". Verified against three independent oracles. |
+
+<table>
+  <tr>
+    <td width="33.33%" valign="top" align="center">
+      <a href="ALU/docs/slice-architecture.jpg"><img src="ALU/docs/slice-architecture.jpg" alt="ALU slice architecture" width="100%"></a>
+      <br><sub><b>ALU</b><br>One bit slice of the ripple-carry ALU</sub>
+    </td>
+    <td width="33.33%" valign="top" align="center">
+      <a href="single-cycle-cpu/docs/sc-cpu-architecture.jpg"><img src="single-cycle-cpu/docs/sc-cpu-architecture.jpg" alt="Single-cycle CPU architecture" width="100%"></a>
+      <br><sub><b>Single-Cycle CPU</b><br>One instruction per clock, start to finish</sub>
+    </td>
+    <td width="33.33%" valign="top" align="center">
+      <a href="pipelined-cpu/docs/pipelined-cpu-architecture.jpg"><img src="pipelined-cpu/docs/pipelined-cpu-architecture.jpg" alt="Pipelined CPU architecture" width="100%"></a>
+      <br><sub><b>Pipelined CPU</b><br>Five stages in flight at once, with forwarding and interlocks</sub>
+    </td>
+  </tr>
+</table>
 
 Each design ships a written **design verification report** ([single-cycle](./single-cycle-cpu/docs/design-verification-report.pdf), [pipelined](./pipelined-cpu/docs/design-verification-report.pdf)) covering methodology, a per-instruction execution trace, a functional coverage matrix, and the open issues. Those reports are the part of the flow that most learning material skips, and they are where "I think it works" becomes "here is why it works".
 
