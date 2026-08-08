@@ -64,13 +64,32 @@ setDesignMode -topRoutingLayer 10 -bottomRoutingLayer 2
 #--------------------------------------------------------------------------
 floorPlan -site $SITE -r $ASPECT $UTIL $MARGIN $MARGIN $MARGIN $MARGIN
 
-# Spread the pins around the boundary instead of leaving them stacked.
-# -unit is deliberately absent: it obliges -spacing, and -spreadType side
-# already distributes the pins evenly along the whole edge.
-setPinAssignMode -pinEditInBatch true
-editPin -pin [all_inputs]  -side LEFT  -layer 3 -spreadType side
-editPin -pin [all_outputs] -side RIGHT -layer 3 -spreadType side
-setPinAssignMode -pinEditInBatch false
+# Spread the pins along the boundary instead of leaving them stacked.
+#
+# Two traps here, both already paid for:
+#   -unit obliges -spacing, so it is absent. -spreadType side already
+#   distributes pins evenly along the whole edge.
+#
+#   editPin -pin wants pin NAMES. [all_inputs] returns an SDC collection
+#   handle, and passing it makes the tool look for a pin literally called
+#   "0x21b". The names come from the design database instead.
+#
+# Wrapped in catch because pin placement is an optimisation, not a
+# requirement. If it fails the flow should carry on with default pins
+# rather than throw away the stages that follow.
+if {[catch {
+    setPinAssignMode -pinEditInBatch true
+    set IN_PINS  [dbGet -e [dbGet -p2 -e top.terms.direction input ].name]
+    set OUT_PINS [dbGet -e [dbGet -p2 -e top.terms.direction output].name]
+    editPin -pin $IN_PINS  -side LEFT  -layer 3 -spreadType side
+    editPin -pin $OUT_PINS -side RIGHT -layer 3 -spreadType side
+    setPinAssignMode -pinEditInBatch false
+    puts "### pins spread: [llength $IN_PINS] in on LEFT, [llength $OUT_PINS] out on RIGHT"
+} msg]} {
+    setPinAssignMode -pinEditInBatch false
+    puts "### pin spreading skipped, using default placement"
+    puts "### reason: $msg"
+}
 
 saveDesign enc/01_floorplan.enc
 puts "### STAGE 1 floorplan done. Die: [dbGet top.fPlan.box]"
@@ -171,16 +190,23 @@ saveDesign enc/06_final.enc
 #--------------------------------------------------------------------------
 # 9. Verify and report
 #--------------------------------------------------------------------------
-verify_connectivity -error 0 -geom_connect -no_antenna
-verify_drc -limit 100
-
-report_timing -late  -max_paths 10 > reports/40_final_setup.rpt
-report_timing -early -max_paths 10 > reports/41_final_hold.rpt
-report_area                        > reports/42_final_area.rpt
-report_power                       > reports/43_final_power.rpt
-summaryReport -noHtml -outfile reports/44_summary.rpt
-
-defOut -netlist -floorplan -routing ${DESIGN}_final.def
+# Each of these is wrapped on its own. By this point the design is routed
+# and saved, and a report command with an option this version dislikes must
+# not be what destroys the run.
+foreach {label cmd} [list \
+    "connectivity" {verify_connectivity -error 0 -geom_connect -no_antenna} \
+    "drc"          {verify_drc -limit 100} \
+    "setup"        {report_timing -late  -max_paths 10 > reports/40_final_setup.rpt} \
+    "hold"         {report_timing -early -max_paths 10 > reports/41_final_hold.rpt} \
+    "area"         {report_area  > reports/42_final_area.rpt} \
+    "power"        {report_power > reports/43_final_power.rpt} \
+    "summary"      {summaryReport -noHtml -outfile reports/44_summary.rpt} \
+    "def"          {defOut -netlist -floorplan -routing ${DESIGN}_final.def} \
+] {
+    if {[catch {eval $cmd} msg]} {
+        puts "### report '$label' failed, continuing: $msg"
+    }
+}
 
 # GDSII, only if the Nangate45 stream file has been fetched. run.sh can
 # download it; without it the DEF above is still a complete layout.
