@@ -141,8 +141,12 @@ puts "### STAGE 3 placement done."
 # Before this the clock is ideal: zero skew, zero insertion delay. After
 # it the clock is a real buffered network and the numbers get honest.
 #--------------------------------------------------------------------------
+# clock_opt_design, not ccopt_design. place_opt_design at stage 3 leaves the
+# database in the unified PODv2 flow, and that flow has its own command set:
+#     place_opt_design -> clock_opt_design -> route_opt_design
+# Mixing the older ccopt_design in gives IMPCCOPT-2440.
 create_ccopt_clock_tree_spec
-ccopt_design
+clock_opt_design
 
 set_interactive_constraint_modes [all_constraint_modes -active]
 set_propagated_clock [all_clocks]
@@ -171,20 +175,22 @@ setNanoRouteMode -routeWithSiDriven true
 setNanoRouteMode -routeUseAutoVia true
 setNanoRouteMode -drouteVerboseViolationSummary 1
 
-routeDesign
+# route_opt_design rather than routeDesign, for the same PODv2 reason as
+# clock_opt_design above. It routes and then optimises against extracted
+# parasitics, so it covers what optDesign -postRoute used to do separately.
+route_opt_design
 
 saveDesign enc/05_routed.enc
 puts "### STAGE 5 routing done."
 
 #--------------------------------------------------------------------------
-# 8. Post route optimisation
+# 8. Final database
 #
-# This is the first point where timing is computed from extracted
-# parasitics on real wires rather than from estimates. It is the only
-# number worth quoting.
+# route_opt_design above already optimised against extracted parasitics,
+# so there is no separate postRoute pass to run. From here the timing
+# numbers come from real wires rather than estimates, which is what makes
+# them the only ones worth quoting.
 #--------------------------------------------------------------------------
-optDesign -postRoute
-
 saveDesign enc/06_final.enc
 
 #--------------------------------------------------------------------------
