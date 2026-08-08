@@ -1,0 +1,6 @@
+# These files are executed on Linux, by nanoHUB. They must keep LF endings
+# whatever the checkout platform does, because a CRLF in a shebang gives
+# "bad interpreter: /bin/bash^M", which names neither the file nor the cause.
+*.sh   text eol=lf
+*.tcl  text eol=lf
+*.sdc  text eol=lf

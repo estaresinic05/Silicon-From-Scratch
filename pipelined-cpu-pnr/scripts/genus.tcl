@@ -1,0 +1,88 @@
+#############################################################################
+# Genus synthesis: pipelined_cpu_core -> Nangate45 gate netlist
+#
+# Author: Elliot Staresinic
+#
+# Run from pipelined-cpu-pnr/work:   genus -files ../scripts/genus.tcl
+#
+# This replaces the yosys run in Verilog/CPU/sta. The design is identical,
+# so the two are directly comparable, and any difference is the synthesiser
+# rather than the RTL.
+#
+# There is no blackboxing here. The memories are outside pipelined_cpu_core
+# by construction, so nothing needs to be hidden from the tool and the
+# "did the memory get optimised away" question does not arise.
+#############################################################################
+
+set NG45    $env(HOME)/MacroPlacement/Enablements/NanGate45
+set DESIGN  pipelined_cpu_core
+set RTL     ../rtl
+set SDC     ../constraints/${DESIGN}.sdc
+set OUT     ../out
+set RPT     ../reports
+
+file mkdir $OUT
+file mkdir $RPT
+
+#--------------------------------------------------------------------------
+# Libraries
+#--------------------------------------------------------------------------
+set_db init_lib_search_path $NG45/lib
+set_db library [list $NG45/lib/NangateOpenCellLibrary_typical.lib]
+
+# The LEF is not needed for logic synthesis, but giving it to Genus lets it
+# use real cell dimensions when it estimates area and wire load.
+set_db lef_library [list \
+    $NG45/lef/NangateOpenCellLibrary.tech.lef \
+    $NG45/lef/NangateOpenCellLibrary.macro.mod.lef ]
+
+#--------------------------------------------------------------------------
+# Read and elaborate
+#--------------------------------------------------------------------------
+read_hdl [glob $RTL/*.v]
+elaborate $DESIGN
+
+# check_design catches unconnected ports and multiply driven nets. It is
+# worth reading even when it passes.
+check_design -unresolved
+check_design -all > $RPT/00_check_design.rpt
+
+read_sdc $SDC
+
+#--------------------------------------------------------------------------
+# Synthesise
+#
+# medium effort on the first pass. Push to high once the flow runs clean
+# and you are chasing a number rather than a result.
+#--------------------------------------------------------------------------
+set_db syn_generic_effort medium
+set_db syn_map_effort     medium
+set_db syn_opt_effort     medium
+
+syn_generic
+syn_map
+syn_opt
+
+#--------------------------------------------------------------------------
+# Hand off to Innovus
+#--------------------------------------------------------------------------
+write_hdl                  > $OUT/${DESIGN}_netlist.v
+write_sdc                  > $OUT/${DESIGN}.sdc
+
+report_area                > $RPT/01_syn_area.rpt
+report_gates               > $RPT/02_syn_gates.rpt
+report_timing              > $RPT/03_syn_timing.rpt
+report_timing -unconstrained > $RPT/04_syn_unconstrained.rpt
+report_power               > $RPT/05_syn_power.rpt
+
+puts "=========================================================="
+puts " SYNTHESIS DONE"
+puts "   netlist : $OUT/${DESIGN}_netlist.v"
+puts "   sdc     : $OUT/${DESIGN}.sdc"
+puts "   reports : $RPT"
+puts "=========================================================="
+puts " Look at 03_syn_timing.rpt before going on. The slack there"
+puts " is the pre-layout number, and post-route will be worse."
+puts "=========================================================="
+
+exit
