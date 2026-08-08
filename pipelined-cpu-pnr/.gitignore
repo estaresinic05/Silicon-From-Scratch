@@ -1,0 +1,16 @@
+# Everything the flow generates. None of it belongs in the repo: the run is
+# reproducible from the scripts, and the databases are large and binary.
+work/
+out/
+reports/
+*.log
+*.cmd
+*.rpt
+*.def
+*.gds
+*.enc
+*.enc.dat/
+.simvision/
+innovus_temp*/
+genus_temp*/
+fe_output/

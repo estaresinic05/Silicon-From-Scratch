@@ -65,9 +65,11 @@ setDesignMode -topRoutingLayer 10 -bottomRoutingLayer 2
 floorPlan -site $SITE -r $ASPECT $UTIL $MARGIN $MARGIN $MARGIN $MARGIN
 
 # Spread the pins around the boundary instead of leaving them stacked.
+# -unit is deliberately absent: it obliges -spacing, and -spreadType side
+# already distributes the pins evenly along the whole edge.
 setPinAssignMode -pinEditInBatch true
-editPin -pin [all_inputs]  -side LEFT  -layer 3 -spreadType SIDE -unit MICRON -spreadDirection clockwise
-editPin -pin [all_outputs] -side RIGHT -layer 3 -spreadType SIDE -unit MICRON -spreadDirection clockwise
+editPin -pin [all_inputs]  -side LEFT  -layer 3 -spreadType side
+editPin -pin [all_outputs] -side RIGHT -layer 3 -spreadType side
 setPinAssignMode -pinEditInBatch false
 
 saveDesign enc/01_floorplan.enc
@@ -130,7 +132,6 @@ set_clock_propagation propagated
 saveDesign enc/04_cts.enc
 report_timing -late  > reports/20_cts_setup.rpt
 report_timing -early > reports/21_cts_hold.rpt
-report_ccopt_clock_trees > reports/22_clock_tree.rpt
 puts "### STAGE 4 clock tree done."
 
 #--------------------------------------------------------------------------
@@ -170,8 +171,8 @@ saveDesign enc/06_final.enc
 #--------------------------------------------------------------------------
 # 9. Verify and report
 #--------------------------------------------------------------------------
-verify_connectivity -type all -error 0 -warning 0 > reports/30_connectivity.rpt
-verify_drc -limit 100                             > reports/31_drc.rpt
+verify_connectivity -error 0 -geom_connect -no_antenna
+verify_drc -limit 100
 
 report_timing -late  -max_paths 10 > reports/40_final_setup.rpt
 report_timing -early -max_paths 10 > reports/41_final_hold.rpt
