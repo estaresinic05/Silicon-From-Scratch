@@ -105,15 +105,31 @@ if {[run_from floorplan]} {
     set init_pwr_net          VDD
     set init_gnd_net          VSS
 
-    # One corner is enough for a first run. Cmax with the QRC techfile means
-    # extraction is real rather than a default table.
-    create_library_set   -name WC_LIB -timing [list $NG45/lib/NangateOpenCellLibrary_typical.lib]
+    # ONE CORNER, AND IT IS THE TYPICAL ONE. Say so, because the difference
+    # matters and the names used to hide it: this block called its library
+    # set WC_LIB and its view WC_VIEW, which read as "worst case" while
+    # pointing at NangateOpenCellLibrary_typical.lib.
+    #
+    # Industry signs setup off on a SLOW corner, slow process with low voltage
+    # and high temperature, and hold on a FAST one, across several modes at
+    # once. A block that closes at typical routinely fails by tens of percent
+    # at slow, so every number this flow produces is optimistic by an amount
+    # nothing here can measure.
+    #
+    # This is not a shortcut that can be taken back: the Nangate45 enablement
+    # ships _typical.lib and nothing else, so the corners do not exist to be
+    # loaded. Fixing it properly means sourcing slow and fast Liberty for this
+    # library first.
+    #
+    # Cmax with the QRC techfile does mean extraction is real rather than a
+    # default table, which is the one part of this that is signoff grade.
+    create_library_set   -name TYP_LIB -timing [list $NG45/lib/NangateOpenCellLibrary_typical.lib]
     create_rc_corner     -name Cmax -qx_tech_file $NG45/qrc/NG45.tch -T 25
-    create_delay_corner  -name WC -library_set WC_LIB -rc_corner Cmax
+    create_delay_corner  -name TYP -library_set TYP_LIB -rc_corner Cmax
     create_constraint_mode -name CON -sdc_files [list out/${DESIGN}.sdc]
-    create_analysis_view  -name WC_VIEW -constraint_mode CON -delay_corner WC
+    create_analysis_view  -name TYP_VIEW -constraint_mode CON -delay_corner TYP
 
-    init_design -setup {WC_VIEW} -hold {WC_VIEW}
+    init_design -setup {TYP_VIEW} -hold {TYP_VIEW}
 
 } else {
     set RESTORE $RESTORE_FROM($START)
@@ -303,8 +319,8 @@ saveDesign enc/06_final.enc
 foreach {label cmd} [list \
     "connectivity" {verify_connectivity -error 0 -geom_connect -no_antenna} \
     "drc"          {verify_drc -limit 100} \
-    "setup"        {report_timing -late  -max_paths 10 > reports/40_final_setup.rpt} \
-    "hold"         {report_timing -early -max_paths 10 > reports/41_final_hold.rpt} \
+    "setup"        {report_timing -late  -max_paths 50 -nworst 1 > reports/40_final_setup.rpt} \
+    "hold"         {report_timing -early -max_paths 50 -nworst 1 > reports/41_final_hold.rpt} \
     "area"         {report_area  > reports/42_final_area.rpt} \
     "power"        {report_power > reports/43_final_power.rpt} \
     "summary"      {summaryReport -noHtml -outfile reports/44_summary.rpt} \
@@ -335,3 +351,11 @@ puts "=========================================================="
 puts " Read reports/40_final_setup.rpt first. The slack on the"
 puts " worst path is your post-route timing result."
 puts "=========================================================="
+
+# innovus -files RUNS the script and then drops to its interactive prompt.
+# Without this, run.sh blocks forever waiting on a tool that has visibly
+# finished, and collect() never appends the run's QOR row. The symptom is a
+# run that prints PLACE AND ROUTE DONE, looks entirely successful, and leaves
+# no row in results/QOR.md, because the shell after run_pnr never got control
+# back. Runs 00 through 02 were each released by typing exit at the prompt.
+exit

@@ -7,11 +7,11 @@ Slacks are nanoseconds, worst path, post-route unless the column says
 otherwise. A negative setup WNS means the run did not make timing at
 that clock. Frozen reports for every run are in `results/<run>/reports/`.
 
-| Run | Clk | Setup WNS | Hold WNS | Hold viol | Cells | Density | Wire | Note |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `00-baseline` | 3.00 | 0.009 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
-| `01-split-uncertainty` | 3.00 | 0.009 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
-| `02-clk2p8` | 2.80 | 0.002 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
+| Run | Clk | Setup WNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `00-baseline` | 3.00 | 0.009 | 0 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
+| `01-split-uncertainty` | 3.00 | 0.009 | 0 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
+| `02-clk2p8` | 2.80 | 0.002 | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
 
 ## Stage progression
 

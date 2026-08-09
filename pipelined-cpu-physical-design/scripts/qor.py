@@ -20,6 +20,7 @@ exception here would throw them away.
 
 import argparse
 import csv
+import gzip
 import re
 import shutil
 import sys
@@ -322,17 +323,23 @@ def write_markdown(rows, md_path):
     The iteration table. One row per run, newest last, so the trend reads
     top to bottom in the order the work happened.
     """
+    # Setup viol sits beside Setup WNS, because WNS is one number and it hides
+    # the shape. A run can show the same worst slack whether one endpoint is
+    # failing or four hundred are, and those are different problems with
+    # different fixes. n_setup_viol was collected from the first version and
+    # printed to the console, but it never reached the table anyone reads.
     head = (
-        "| Run | Clk | Setup WNS | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
-        "|---|---:|---:|---:|---:|---:|---:|---:|---|\n"
+        "| Run | Clk | Setup WNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
     )
     lines = []
     for r in rows:
         lines.append(
-            "| `{run}` | {clk} | {ws} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
+            "| `{run}` | {clk} | {ws} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
                 run=r.get("run", "?"),
                 clk=_fmt(r.get("clk_ns"), 2),
                 ws=_fmt(r.get("wns_setup")),
+                ns=_viol(r.get("n_setup_viol")),
                 wh=_fmt(r.get("wns_hold")),
                 # NOT `or "-"`: zero is falsy, so a run with no hold
                 # violations rendered as "-" and read as missing data. Zero
@@ -419,6 +426,28 @@ def archive_reports(run_dir, results_dir):
         n += _copy(geom, dest / "45_drc.rpt")
     for conn in run_dir.glob("*.conn.rpt"):
         n += _copy(conn, dest / "46_connectivity.rpt")
+
+    # The post-route timing summary, which is the report a PD engineer reads
+    # first and the one this project went longest without.
+    #
+    # report_timing shows N paths and answers "what is the worst one". This
+    # answers "how many are there", per path group: WNS, TNS, violating paths,
+    # total paths, and the max_cap/max_tran/max_fanout design rule violations
+    # beside them. WNS alone cannot tell one failing endpoint from four hundred.
+    #
+    # Innovus writes these gzipped into timingReports/, so they are ungzipped
+    # on the way out. A .gz in the repo is a file nobody opens on GitHub, and
+    # these are two or three kilobytes of text.
+    for gz in sorted(run_dir.glob("timingReports/*postRoute*.summary.gz")):
+        stem = "50_postroute_summary.rpt"
+        if "_hold" in gz.name:
+            stem = "51_postroute_hold_summary.rpt"
+        try:
+            with gzip.open(str(gz), "rt", errors="replace") as fh:
+                (dest / stem).write_text(fh.read())
+            n += 1
+        except (OSError, EOFError):
+            pass
 
     # The elaborated SDC, beside the reports rather than under reports/.
     #
