@@ -31,15 +31,24 @@ try:
 except ImportError:
     sys.exit("python-docx is required:  pip install python-docx")
 
+try:
+    from PIL import Image
+except ImportError:
+    Image = None  # only used to spot wide figures; absence is not fatal
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qor  # noqa: E402
 
 
 # --------------------------------------------------------------------------
-# Design tokens. Copper on a cool grey, matching the HTML write-ups so the
-# set reads as one body of work.
+# Design tokens.
 # --------------------------------------------------------------------------
-ACCENT = RGBColor(0x9C, 0x5A, 0x26)
+# The purple is the site's own logo accent, #6B2FC9, lightened for display
+# sizes so it reads as colour rather than as ink. ACCENT_DEEP is the
+# unlightened value, used where the type is small enough that the lighter one
+# would go weak on white.
+ACCENT = RGBColor(0x7B, 0x47, 0xD4)
+ACCENT_DEEP = RGBColor(0x6B, 0x2F, 0xC9)
 INK = RGBColor(0x14, 0x18, 0x1D)
 INK_2 = RGBColor(0x43, 0x4C, 0x57)
 INK_3 = RGBColor(0x6E, 0x77, 0x84)
@@ -145,6 +154,20 @@ def keep_with_next(paragraph):
     pPr.append(el)
 
 
+def repeat_header(table):
+    """
+    Mark row 0 as a header so Word redraws it at the top of each page.
+
+    Without this a table that breaks across a page continues as unlabelled
+    columns of numbers, which is exactly where a reader loses the thread.
+    """
+    tr = table.rows[0]._tr
+    trPr = tr.get_or_add_trPr()
+    el = OxmlElement("w:tblHeader")
+    el.set(qn("w:val"), "true")
+    trPr.append(el)
+
+
 # --------------------------------------------------------------------------
 # document furniture
 # --------------------------------------------------------------------------
@@ -156,8 +179,8 @@ def setup_styles(doc):
     normal.font.color.rgb = INK
     normal.element.rPr.rFonts.set(qn("w:eastAsia"), BODY_FONT)
     pf = normal.paragraph_format
-    pf.space_after = Pt(8)
-    pf.line_spacing = 1.18
+    pf.space_after = Pt(7)
+    pf.line_spacing = 1.13
 
     sizes = {"Heading 1": 17, "Heading 2": 13.5, "Heading 3": 11.5}
     for name, size in sizes.items():
@@ -166,17 +189,26 @@ def setup_styles(doc):
         st.font.size = Pt(size)
         st.font.bold = True
         st.font.italic = False
-        st.font.color.rgb = INK if name != "Heading 1" else ACCENT
+        # Lighter purple at display sizes; the deeper value at Heading 3,
+        # where the type is small enough that the light one goes weak.
+        st.font.color.rgb = ACCENT_DEEP if name == "Heading 3" else ACCENT
         st.element.rPr.rFonts.set(qn("w:eastAsia"), BODY_FONT)
-        st.paragraph_format.space_before = Pt(20 if name == "Heading 1" else 13)
+        st.paragraph_format.space_before = Pt(15 if name == "Heading 1" else 11)
         st.paragraph_format.space_after = Pt(6)
+        # keep_with_next stops a heading stranding at the foot of a page;
+        # keep_together stops a two-line heading splitting across the break.
         st.paragraph_format.keep_with_next = True
+        st.paragraph_format.keep_together = True
+
+    # Widow and orphan control on body text, so a paragraph never leaves one
+    # lonely line behind on the previous page.
+    doc.styles["Normal"].paragraph_format.widow_control = True
 
     for section in doc.sections:
-        section.top_margin = Inches(1.0)
-        section.bottom_margin = Inches(1.0)
-        section.left_margin = Inches(1.1)
-        section.right_margin = Inches(1.1)
+        section.top_margin = Inches(0.9)
+        section.bottom_margin = Inches(0.85)
+        section.left_margin = Inches(1.0)
+        section.right_margin = Inches(1.0)
 
 
 def add_footer(doc, design):
@@ -274,7 +306,9 @@ def code_block(doc, text, caption=None):
 def add_caption(doc, text):
     p = doc.add_paragraph()
     p.paragraph_format.space_before = Pt(4)
-    p.paragraph_format.space_after = Pt(12)
+    p.paragraph_format.space_after = Pt(9)
+    # A caption is short and must never split across a page break.
+    p.paragraph_format.keep_together = True
     r = p.add_run(text)
     r.font.size = Pt(8.5)
     r.font.italic = True
@@ -285,6 +319,7 @@ def data_table(doc, headers, rows, aligns=None, caption=None, widths=None):
     table = doc.add_table(rows=1, cols=len(headers))
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
     set_borders(table)
+    repeat_header(table)
     aligns = aligns or ["l"] * len(headers)
 
     hdr = table.rows[0]
@@ -345,7 +380,21 @@ def bullets(doc, items):
         p.add_run(rest)
 
 
-def maybe_figure(doc, images_dir, key, width_in=6.0):
+# Die captures are square, so width is also height. At 6 inches a figure was
+# two thirds of the 9 inch text column, which meant any figure not landing
+# near the top of a page got pushed to the next one and left a hand-sized gap
+# behind it. 4.2 inches flows: two can share a page, and a figure can follow a
+# paragraph instead of displacing it. Resolution improves as a side effect,
+# since the same 1043 px is now 248 dpi rather than 174.
+FIG_WIDTH_IN = 3.1
+
+# Figure numbering, so captions read "Figure 3." the way the tables read
+# "Table 3.". A list rather than an int because it is rebound from inside
+# maybe_figure; build() resets it.
+_FIG_N = [0]
+
+
+def maybe_figure(doc, images_dir, key, width_in=None):
     """Insert a screenshot if it exists. Silence if it does not."""
     if not images_dir:
         return False
@@ -355,14 +404,89 @@ def maybe_figure(doc, images_dir, key, width_in=6.0):
         path = Path(images_dir) / name
         if not path.exists():
             return False
+
+        width = width_in or FIG_WIDTH_IN
+        # A wide, short image would be needlessly small at the square width,
+        # so give landscape figures more room.
+        if Image is not None:
+            try:
+                with Image.open(path) as im:
+                    w, h = im.size
+                if h and w / h > 1.6:
+                    width = min(6.0, width * 1.35)
+            except OSError:
+                pass
+
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.space_before = Pt(8)
+        p.paragraph_format.space_before = Pt(7)
         p.paragraph_format.space_after = Pt(2)
-        p.add_run().add_picture(str(path), width=Inches(width_in))
-        add_caption(doc, caption)
+        # Bind the image to its caption so a page break can never fall
+        # between them.
+        p.paragraph_format.keep_with_next = True
+        p.add_run().add_picture(str(path), width=Inches(width))
+        _FIG_N[0] += 1
+        add_caption(doc, f"Figure {_FIG_N[0]}. {caption}")
         return True
     return False
+
+
+def _figure_spec(key):
+    for name, tag, caption in FIGURES:
+        if tag == key:
+            return name, caption
+    return None, None
+
+
+def figure_pair(doc, images_dir, key_left, key_right, width_in=2.85):
+    """
+    Two figures side by side in a borderless table, captions beneath each.
+
+    Six square figures stacked one per row is nearly three pages of nothing
+    but pictures. Paired, they cost a little over one. Falls back to a single
+    figure if only one of the two images exists, so a partial screenshot set
+    still produces a sensible document.
+    """
+    if not images_dir:
+        return False
+
+    have = []
+    for key in (key_left, key_right):
+        name, caption = _figure_spec(key)
+        if name and (Path(images_dir) / name).exists():
+            have.append((Path(images_dir) / name, caption))
+
+    if not have:
+        return False
+    if len(have) == 1:
+        return maybe_figure(doc, images_dir, key_left if _figure_spec(key_left)[0]
+                            and (Path(images_dir) / _figure_spec(key_left)[0]).exists()
+                            else key_right)
+
+    table = doc.add_table(rows=1, cols=2)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = False
+    row = table.rows[0]
+    for idx, (path, caption) in enumerate(have):
+        cell = row.cells[idx]
+        cell.width = Inches(3.05)
+        p = cell.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_after = Pt(2)
+        p.paragraph_format.space_before = Pt(4)
+        p.add_run().add_picture(str(path), width=Inches(width_in))
+
+        _FIG_N[0] += 1
+        c = cell.add_paragraph()
+        c.paragraph_format.space_before = Pt(2)
+        c.paragraph_format.space_after = Pt(4)
+        r = c.add_run(f"Figure {_FIG_N[0]}. {caption}")
+        r.font.size = Pt(8)
+        r.font.italic = True
+        r.font.color.rgb = INK_3
+
+    doc.add_paragraph().paragraph_format.space_after = Pt(6)
+    return True
 
 
 # --------------------------------------------------------------------------
@@ -392,6 +516,7 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
     notes_file = run_dir / "NOTES.md"
     note = notes_file.read_text(encoding="utf-8").strip() if notes_file.exists() else ""
 
+    _FIG_N[0] = 0
     doc = Document()
     setup_styles(doc)
     add_footer(doc, "pipelined_cpu_core")
@@ -588,7 +713,18 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
     except (TypeError, ValueError):
         pass
 
-    maybe_figure(doc, images_dir, "figure-path")
+    body(doc,
+         "The worst path launches from a register in MEM/WB, crosses the "
+         "forwarding unit that decides EX must take a forwarded value rather "
+         "than the register file's, and then ripples the carry across all 32 "
+         "bits of the ALU adder before being captured in EX/MEM. Of the "
+         "2.863 ns that path takes, 2.123 ns is the carry chain alone: "
+         "74 percent of the clock period sits in one ripple-carry adder. "
+         "That is the single change worth making to the design, and the adder "
+         "is under 3 percent of the area, so speed there is cheap.",
+         bold_lead="Where the time actually goes. ")
+
+    figure_pair(doc, images_dir, "figure-clock", "figure-path")
 
     body(doc,
          "A run that meets timing does not tell you what was achievable. The "
@@ -628,7 +764,6 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
                     "a block this small has no journeys long enough to need them.",
         )
 
-    maybe_figure(doc, images_dir, "figure-zoom")
 
     body(doc,
          "The power grid is worth seeing on its own, because none of it comes "
@@ -639,9 +774,25 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
          "globalNetConnect declared it.",
          bold_lead="Power is added, never inherited. ")
 
-    maybe_figure(doc, images_dir, "figure-power")
-    maybe_figure(doc, images_dir, "figure-modules")
-    maybe_figure(doc, images_dir, "figure-clock")
+    figure_pair(doc, images_dir, "figure-zoom", "figure-power")
+
+    muxed = d.get("flops_muxed")
+    muxed_um2 = d.get("flops_muxed_um2")
+    if muxed and muxed_um2 and d.get("logic_um2"):
+        share = 100 * float(muxed_um2) / float(d["logic_um2"])
+        body(doc,
+             f"Of the {i(d.get('flops'))} flip-flops, {i(muxed)} are SDFF, a "
+             f"cell with a 2x1 multiplexer built into it, which is what an "
+             f"enable-guarded register maps onto. That count is the register "
+             f"file exactly: 31 architectural registers of 32 bits, x0 costing "
+             f"nothing because it is hardwired to zero. Those cells alone are "
+             f"{f(muxed_um2, 0)} um2, or {share:.0f} percent of all logic area, "
+             f"and the multiplexer tree that reads them adds more. "
+             f"The structure that dominates the area and the structure that "
+             f"dominates the clock are different parts of the design.",
+             bold_lead="Where the area actually goes. ")
+
+    maybe_figure(doc, images_dir, "figure-modules", width_in=2.7)
     maybe_figure(doc, images_dir, "figure-congestion")
 
     # -------------------------------------------------------------------- gaps
@@ -696,12 +847,12 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
                .format(p=f(clk, 1, "3.0"), n=d.get("run")))
 
     p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(14)
+    p.paragraph_format.space_before = Pt(8)
     para_rule(p, color="14181D", size=12)
 
     for line in [
-        f"Generated from {d.get('run')} by scripts/make_report.py.",
-        "Numbers are parsed from the run's reports and are not transcribed.",
+        f"Generated from {d.get('run')} by scripts/make_report.py. Numbers are "
+        f"parsed from the run's reports, not transcribed.",
         "Repository: estaresinic05/Silicon-From-Scratch",
     ]:
         p = doc.add_paragraph()

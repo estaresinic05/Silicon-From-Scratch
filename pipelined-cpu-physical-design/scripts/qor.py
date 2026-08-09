@@ -131,6 +131,11 @@ def parse_summary(path):
         d["cells"] = sum(c for c, _ in real.values())
         d["fillers"] = sum(c for c, _ in fill.values())
         d["flops"] = sum(c for k, (c, _) in real.items() if "DFF" in k)
+        # SDFF is a flop with a 2x1 mux built into the cell, which is what an
+        # enable-guarded register maps onto. Counting those separately is how
+        # a register file shows itself in an area breakdown.
+        d["flops_muxed"] = sum(c for k, (c, _) in real.items() if k.startswith("SDFF"))
+        d["flops_muxed_um2"] = sum(a for k, (_, a) in real.items() if k.startswith("SDFF"))
 
     def grab(pattern, cast=float):
         m = re.search(pattern, text)
