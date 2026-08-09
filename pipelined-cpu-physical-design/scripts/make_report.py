@@ -11,6 +11,13 @@ Nothing is typed in by hand, which means a regenerated report cannot disagree
 with the reports it claims to describe, and each iteration gets a document
 that is correct by construction.
 
+The document furniture matches the design verification reports in
+Verilog/CPU/*/docs/design-verification-report.docx: Arial body, the purple
+heading ramp, a centred cover page carrying a result banner, a generated
+table of contents, numbered sections, a ruled running header and a
+'Page N of M' footer. The two families of report are read side by side, so
+they are set the same way.
+
 Screenshots are optional. Any of the filenames in FIGURES found in --images
 is placed in its section with a caption; the rest of the document closes over
 the gap. Requires python-docx.
@@ -22,7 +29,6 @@ from pathlib import Path
 
 try:
     from docx import Document
-    from docx.enum.section import WD_SECTION
     from docx.enum.table import WD_TABLE_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.oxml import OxmlElement
@@ -41,24 +47,36 @@ import qor  # noqa: E402
 
 
 # --------------------------------------------------------------------------
-# Design tokens.
+# Design tokens, taken from the design verification reports.
 # --------------------------------------------------------------------------
-# The purple is the site's own logo accent, #6B2FC9, lightened for display
-# sizes so it reads as colour rather than as ink. ACCENT_DEEP is the
-# unlightened value, used where the type is small enough that the lighter one
-# would go weak on white.
-ACCENT = RGBColor(0x7B, 0x47, 0xD4)
-ACCENT_DEEP = RGBColor(0x6B, 0x2F, 0xC9)
-INK = RGBColor(0x14, 0x18, 0x1D)
-INK_2 = RGBColor(0x43, 0x4C, 0x57)
-INK_3 = RGBColor(0x6E, 0x77, 0x84)
+# The heading ramp darkens as the type gets smaller, so a Heading 3 at 12pt
+# does not go weak against white the way the display purple would.
+H1_PURPLE = RGBColor(0x3A, 0x16, 0x75)
+H2_PURPLE = RGBColor(0x5A, 0x28, 0xB0)
+H3_PURPLE = RGBColor(0x4F, 0x1F, 0x9E)
+CAPTION_INK = RGBColor(0x22, 0x12, 0x4A)
+MUTED = RGBColor(0x59, 0x59, 0x59)
+RULE_GREY = RGBColor(0x80, 0x80, 0x80)
 
-FILL_HEAD = "E3E7EC"
-FILL_CODE = "F4F6F8"
-FILL_ZEBRA = "F7F9FA"
+PASS_GREEN = RGBColor(0x2E, 0x7D, 0x32)
+WARN_AMBER = RGBColor(0xB2, 0x6A, 0x00)
+FAIL_RED = RGBColor(0xC6, 0x28, 0x28)
 
-BODY_FONT = "Cambria"
+FILL_HEAD = "DED2F6"
+FILL_ZEBRA = "F1ECFB"
+BORDER_GREY = "CCCCCC"
+
+BODY_FONT = "Arial"
 MONO_FONT = "Consolas"
+
+BODY_PT = 11
+TABLE_PT = 9.5
+MONO_PT = 9
+
+# The text column at 1 inch margins on US Letter, in twentieths of a point.
+# The running header's right tab and the table width both key off it.
+TEXT_WIDTH_TWIPS = 9360
+TEXT_WIDTH_IN = 6.5
 
 FIGURES = [
     ("die-routed.png", "figure-die",
@@ -104,11 +122,7 @@ def shade_cell(cell, fill):
     _shade(cell._tc.get_or_add_tcPr(), fill)
 
 
-def shade_para(paragraph, fill):
-    _shade(paragraph._p.get_or_add_pPr(), fill)
-
-
-def set_borders(table, color="CCD3DA", size=4):
+def set_borders(table, color=BORDER_GREY, size=4):
     """python-docx has no border API, so this is raw OOXML."""
     tblPr = table._tbl.tblPr
     borders = OxmlElement("w:tblBorders")
@@ -116,42 +130,96 @@ def set_borders(table, color="CCD3DA", size=4):
         el = OxmlElement(f"w:{edge}")
         el.set(qn("w:val"), "single")
         el.set(qn("w:sz"), str(size))
+        el.set(qn("w:space"), "0")
         el.set(qn("w:color"), color)
         borders.append(el)
     tblPr.append(borders)
 
 
-def para_rule(paragraph, color="14181D", size=12):
-    """A horizontal rule, drawn as a bottom border on an empty paragraph."""
+def set_cell_margins(table, top=60, left=120, bottom=60, right=120):
+    """Breathing room inside every cell, matching the verification reports."""
+    tblPr = table._tbl.tblPr
+    mar = OxmlElement("w:tblCellMar")
+    for edge, value in (("top", top), ("left", left),
+                        ("bottom", bottom), ("right", right)):
+        el = OxmlElement(f"w:{edge}")
+        el.set(qn("w:w"), str(value))
+        el.set(qn("w:type"), "dxa")
+        mar.append(el)
+    tblPr.append(mar)
+
+
+def vcenter(cell):
+    el = OxmlElement("w:vAlign")
+    el.set(qn("w:val"), "center")
+    cell._tc.get_or_add_tcPr().append(el)
+
+
+def para_border(paragraph, edge="bottom", color=BORDER_GREY, size=4, space=2):
+    """A rule, drawn as a border on an otherwise empty paragraph."""
     pPr = paragraph._p.get_or_add_pPr()
     borders = OxmlElement("w:pBdr")
-    bottom = OxmlElement("w:bottom")
-    bottom.set(qn("w:val"), "single")
-    bottom.set(qn("w:sz"), str(size))
-    bottom.set(qn("w:space"), "1")
-    bottom.set(qn("w:color"), color)
-    borders.append(bottom)
+    el = OxmlElement(f"w:{edge}")
+    el.set(qn("w:val"), "single")
+    el.set(qn("w:sz"), str(size))
+    el.set(qn("w:space"), str(space))
+    el.set(qn("w:color"), color)
+    borders.append(el)
     pPr.append(borders)
 
 
-def add_field(paragraph, instruction):
+def right_tab(paragraph, pos=TEXT_WIDTH_TWIPS):
+    pPr = paragraph._p.get_or_add_pPr()
+    tabs = OxmlElement("w:tabs")
+    tab = OxmlElement("w:tab")
+    tab.set(qn("w:val"), "right")
+    tab.set(qn("w:pos"), str(pos))
+    tabs.append(tab)
+    pPr.append(tabs)
+
+
+def add_field(paragraph, instruction, placeholder=None, dirty=False):
+    """
+    A Word field: PAGE, NUMPAGES, TOC.
+
+    The placeholder is what a reader sees before the field is calculated.
+    Marking the field dirty asks Word to recalculate it when the document
+    opens, which is what fills in a table of contents that python-docx has
+    no way to compute for itself.
+    """
     run = paragraph.add_run()
     begin = OxmlElement("w:fldChar")
     begin.set(qn("w:fldCharType"), "begin")
+    if dirty:
+        begin.set(qn("w:dirty"), "true")
     instr = OxmlElement("w:instrText")
     instr.set(qn("xml:space"), "preserve")
     instr.text = instruction
+    run._r.append(begin)
+    run._r.append(instr)
+    if placeholder is not None:
+        sep = OxmlElement("w:fldChar")
+        sep.set(qn("w:fldCharType"), "separate")
+        text = OxmlElement("w:t")
+        text.text = placeholder
+        run._r.append(sep)
+        run._r.append(text)
     end = OxmlElement("w:fldChar")
     end.set(qn("w:fldCharType"), "end")
-    for el in (begin, instr, end):
-        run._r.append(el)
+    run._r.append(end)
     return run
 
 
-def keep_with_next(paragraph):
-    pPr = paragraph._p.get_or_add_pPr()
-    el = OxmlElement("w:keepNext")
-    pPr.append(el)
+def update_fields_on_open(doc):
+    """
+    Ask Word to recalculate every field when the file opens.
+
+    Without this the table of contents renders as its placeholder text and
+    the reader has to know to press F9, which they will not.
+    """
+    el = OxmlElement("w:updateFields")
+    el.set(qn("w:val"), "true")
+    doc.settings.element.append(el)
 
 
 def repeat_header(table):
@@ -168,6 +236,13 @@ def repeat_header(table):
     trPr.append(el)
 
 
+def cant_split(table):
+    """No row may be broken in half by a page break."""
+    for row in table.rows:
+        trPr = row._tr.get_or_add_trPr()
+        trPr.append(OxmlElement("w:cantSplit"))
+
+
 # --------------------------------------------------------------------------
 # document furniture
 # --------------------------------------------------------------------------
@@ -175,101 +250,159 @@ def repeat_header(table):
 def setup_styles(doc):
     normal = doc.styles["Normal"]
     normal.font.name = BODY_FONT
-    normal.font.size = Pt(10.5)
-    normal.font.color.rgb = INK
+    normal.font.size = Pt(BODY_PT)
     normal.element.rPr.rFonts.set(qn("w:eastAsia"), BODY_FONT)
     pf = normal.paragraph_format
-    pf.space_after = Pt(7)
-    pf.line_spacing = 1.13
+    pf.space_after = Pt(6)
+    # Widow and orphan control, so a paragraph never leaves one lonely line
+    # behind on the previous page.
+    pf.widow_control = True
 
-    sizes = {"Heading 1": 17, "Heading 2": 13.5, "Heading 3": 11.5}
-    for name, size in sizes.items():
+    ramp = {
+        "Heading 1": (17, True, H1_PURPLE, 18, 8),
+        "Heading 2": (13, True, H2_PURPLE, 12, 6),
+        "Heading 3": (12, False, H3_PURPLE, 10, 6),
+    }
+    for name, (size, bold, colour, before, after) in ramp.items():
         st = doc.styles[name]
         st.font.name = BODY_FONT
         st.font.size = Pt(size)
-        st.font.bold = True
+        st.font.bold = bold
         st.font.italic = False
-        # Lighter purple at display sizes; the deeper value at Heading 3,
-        # where the type is small enough that the light one goes weak.
-        st.font.color.rgb = ACCENT_DEEP if name == "Heading 3" else ACCENT
+        st.font.color.rgb = colour
         st.element.rPr.rFonts.set(qn("w:eastAsia"), BODY_FONT)
-        st.paragraph_format.space_before = Pt(15 if name == "Heading 1" else 11)
-        st.paragraph_format.space_after = Pt(6)
+        st.paragraph_format.space_before = Pt(before)
+        st.paragraph_format.space_after = Pt(after)
         # keep_with_next stops a heading stranding at the foot of a page;
         # keep_together stops a two-line heading splitting across the break.
         st.paragraph_format.keep_with_next = True
         st.paragraph_format.keep_together = True
 
-    # Widow and orphan control on body text, so a paragraph never leaves one
-    # lonely line behind on the previous page.
-    doc.styles["Normal"].paragraph_format.widow_control = True
+    cap = doc.styles["Caption"]
+    cap.font.name = BODY_FONT
+    cap.font.size = Pt(9)
+    cap.font.italic = True
+    cap.font.bold = False
+    cap.font.color.rgb = CAPTION_INK
+    cap.paragraph_format.space_after = Pt(10)
+    cap.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    cap.paragraph_format.keep_together = True
 
     for section in doc.sections:
-        section.top_margin = Inches(0.9)
-        section.bottom_margin = Inches(0.85)
+        section.top_margin = Inches(1.0)
+        section.bottom_margin = Inches(1.0)
         section.left_margin = Inches(1.0)
         section.right_margin = Inches(1.0)
 
 
-def add_footer(doc, design):
-    footer = doc.sections[0].footer
-    p = footer.paragraphs[0]
+def add_header(doc, left_text, right_text):
+    p = doc.sections[0].header.paragraphs[0]
+    para_border(p, edge="bottom", color=BORDER_GREY, size=4, space=2)
+    right_tab(p)
+    for text, tab_first in ((left_text, False), (right_text, True)):
+        if tab_first:
+            r = p.add_run()
+            r.font.size = Pt(8)
+            r._r.append(OxmlElement("w:tab"))
+        r = p.add_run(text)
+        r.font.name = BODY_FONT
+        r.font.size = Pt(8)
+        r.font.color.rgb = RULE_GREY
+
+
+def add_footer(doc):
+    p = doc.sections[0].footer.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(f"{design}   ·   ")
-    run.font.size = Pt(8)
-    run.font.name = MONO_FONT
-    run.font.color.rgb = INK_3
-    fld = add_field(p, "PAGE")
-    fld.font.size = Pt(8)
-    fld.font.name = MONO_FONT
-    fld.font.color.rgb = INK_3
+    para_border(p, edge="top", color=BORDER_GREY, size=4, space=2)
+
+    def grey(run):
+        run.font.name = BODY_FONT
+        run.font.size = Pt(8)
+        run.font.color.rgb = RULE_GREY
+        return run
+
+    grey(p.add_run("Page "))
+    grey(add_field(p, "PAGE", placeholder="1"))
+    grey(p.add_run(" of "))
+    grey(add_field(p, "NUMPAGES", placeholder="1"))
 
 
 # --------------------------------------------------------------------------
 # content builders
 # --------------------------------------------------------------------------
 
-def title_block(doc, title, subtitle, meta_pairs):
-    p = doc.add_paragraph()
-    p.paragraph_format.space_after = Pt(2)
-    r = p.add_run("PHYSICAL DESIGN REPORT")
-    r.font.name = MONO_FONT
-    r.font.size = Pt(8)
-    r.font.bold = True
-    r.font.color.rgb = ACCENT
-    r.font.all_caps = True
+# Section numbering. Headings read "3.", "3.1" the way the verification
+# reports do, and the numbers are counted rather than typed so inserting a
+# section can never leave the rest of the document misnumbered.
+_SEC = [0, 0]
 
+
+def h1(doc, title):
+    _SEC[0] += 1
+    _SEC[1] = 0
+    return doc.add_heading(f"{_SEC[0]}.  {title}", level=1)
+
+
+def h2(doc, title):
+    _SEC[1] += 1
+    return doc.add_heading(f"{_SEC[0]}.{_SEC[1]}  {title}", level=2)
+
+
+def appendix(doc, letter, title):
+    return doc.add_heading(f"Appendix {letter}.  {title}", level=1)
+
+
+def centred(doc, text, size, colour=None, bold=False, italic=False,
+            before=None, after=None):
     p = doc.add_paragraph()
-    p.paragraph_format.space_after = Pt(4)
-    r = p.add_run(title)
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if before is not None:
+        p.paragraph_format.space_before = Pt(before)
+    if after is not None:
+        p.paragraph_format.space_after = Pt(after)
+    r = p.add_run(text)
     r.font.name = BODY_FONT
-    r.font.size = Pt(26)
-    r.font.bold = True
-    r.font.color.rgb = INK
+    r.font.size = Pt(size)
+    r.font.bold = bold
+    r.font.italic = italic
+    if colour is not None:
+        r.font.color.rgb = colour
+    return p
 
+
+def cover_page(doc, title, subtitle, tagline, author, meta_lines,
+               banner_text, banner_colour, images_dir=None, cover_key=None):
+    centred(doc, title, 28, H1_PURPLE, bold=True, before=90, after=8)
+    centred(doc, subtitle, 16, H2_PURPLE, after=2)
+    centred(doc, tagline, 13, MUTED, italic=True, after=30)
+
+    centred(doc, f"Design Author: {author}", BODY_PT, after=2)
+    for line in meta_lines:
+        centred(doc, line, 10, MUTED, after=2)
+
+    centred(doc, banner_text, 14, banner_colour, bold=True,
+            before=24, after=6)
+
+    if images_dir and cover_key:
+        name, _ = _figure_spec(cover_key)
+        path = Path(images_dir) / name if name else None
+        if path and path.exists():
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_before = Pt(10)
+            p.add_run().add_picture(str(path), width=Inches(3.4))
+
+    doc.add_page_break()
+
+
+def add_toc(doc):
+    doc.add_heading("Contents", level=1)
     p = doc.add_paragraph()
-    p.paragraph_format.space_after = Pt(12)
-    r = p.add_run(subtitle)
-    r.font.size = Pt(11.5)
-    r.font.color.rgb = INK_2
-
-    rule = doc.add_paragraph()
-    rule.paragraph_format.space_after = Pt(8)
-    para_rule(rule)
-
-    for label, value in meta_pairs:
-        p = doc.add_paragraph()
-        p.paragraph_format.space_after = Pt(1)
-        r = p.add_run(f"{label}   ")
-        r.font.name = MONO_FONT
-        r.font.size = Pt(8.5)
-        r.font.color.rgb = INK_3
-        r = p.add_run(str(value))
-        r.font.name = MONO_FONT
-        r.font.size = Pt(8.5)
-        r.font.color.rgb = INK_2
-
-    doc.add_paragraph().paragraph_format.space_after = Pt(4)
+    add_field(p, 'TOC \\h \\o "1-2"',
+              placeholder="Right-click here and choose Update Field to build "
+                          "the table of contents.",
+              dirty=True)
+    doc.add_page_break()
 
 
 def body(doc, text, bold_lead=None):
@@ -281,44 +414,39 @@ def body(doc, text, bold_lead=None):
     return p
 
 
-def code_block(doc, text, caption=None):
-    """A shaded single-cell table. Word has no reliable code style."""
-    table = doc.add_table(rows=1, cols=1)
-    table.alignment = WD_TABLE_ALIGNMENT.LEFT
-    set_borders(table, color="DDE3E9", size=4)
-    cell = table.cell(0, 0)
-    shade_cell(cell, FILL_CODE)
-    cell.text = ""
-    for i, line in enumerate(text.rstrip("\n").split("\n")):
-        p = cell.paragraphs[0] if i == 0 else cell.add_paragraph()
-        p.paragraph_format.space_after = Pt(0)
+def mono_block(doc, text):
+    """
+    A monospace run of lines, set the way the verification reports set a
+    module hierarchy: no box, no shading, just Consolas holding the columns.
+    """
+    lines = text.rstrip("\n").split("\n")
+    for n, line in enumerate(lines):
+        p = doc.add_paragraph()
+        p.paragraph_format.space_after = Pt(8 if n == len(lines) - 1 else 0)
+        p.paragraph_format.space_before = Pt(3 if n == 0 else 0)
         p.paragraph_format.line_spacing = 1.0
         r = p.add_run(line if line else " ")
         r.font.name = MONO_FONT
-        r.font.size = Pt(8.5)
-        r.font.color.rgb = INK
-    if caption:
-        add_caption(doc, caption)
-    else:
-        doc.add_paragraph().paragraph_format.space_after = Pt(4)
+        r.font.size = Pt(MONO_PT)
+    return lines
 
 
-def add_caption(doc, text):
-    p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(4)
-    p.paragraph_format.space_after = Pt(9)
-    # A caption is short and must never split across a page break.
-    p.paragraph_format.keep_together = True
-    r = p.add_run(text)
-    r.font.size = Pt(8.5)
-    r.font.italic = True
-    r.font.color.rgb = INK_3
+_CAP_N = {"Figure": 0, "Table": 0}
+
+
+def add_caption(doc, kind, text):
+    _CAP_N[kind] += 1
+    p = doc.add_paragraph(style="Caption")
+    p.add_run(f"{kind} {_CAP_N[kind]}: {text}")
+    return p
 
 
 def data_table(doc, headers, rows, aligns=None, caption=None, widths=None):
     table = doc.add_table(rows=1, cols=len(headers))
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
+    table.autofit = False
     set_borders(table)
+    set_cell_margins(table)
     repeat_header(table)
     aligns = aligns or ["l"] * len(headers)
 
@@ -326,16 +454,16 @@ def data_table(doc, headers, rows, aligns=None, caption=None, widths=None):
     for i, h in enumerate(headers):
         cell = hdr.cells[i]
         shade_cell(cell, FILL_HEAD)
+        vcenter(cell)
         p = cell.paragraphs[0]
-        p.paragraph_format.space_after = Pt(2)
-        p.paragraph_format.space_before = Pt(2)
+        p.paragraph_format.space_after = Pt(0)
+        p.paragraph_format.space_before = Pt(0)
         if aligns[i] == "r":
             p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         r = p.add_run(str(h))
-        r.font.name = MONO_FONT
-        r.font.size = Pt(8)
+        r.font.name = BODY_FONT
+        r.font.size = Pt(TABLE_PT)
         r.font.bold = True
-        r.font.color.rgb = INK_2
 
     for n, row in enumerate(rows):
         cells = table.add_row().cells
@@ -343,8 +471,8 @@ def data_table(doc, headers, rows, aligns=None, caption=None, widths=None):
             if n % 2 == 1:
                 shade_cell(cells[i], FILL_ZEBRA)
             p = cells[i].paragraphs[0]
-            p.paragraph_format.space_after = Pt(2)
-            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.space_before = Pt(0)
             if aligns[i] == "r":
                 p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
             text = "" if val is None else str(val)
@@ -352,19 +480,25 @@ def data_table(doc, headers, rows, aligns=None, caption=None, widths=None):
             if bold:
                 text = text[2:-2]
             r = p.add_run(text)
-            r.font.size = Pt(9)
+            r.font.name = BODY_FONT
+            r.font.size = Pt(TABLE_PT)
             r.font.bold = bold
-            if aligns[i] == "r" or i == 0:
-                r.font.name = MONO_FONT
-                r.font.size = Pt(8.5)
+
+    cant_split(table)
 
     if widths:
+        # The column widths are written as proportions of each other and then
+        # scaled to fill the text column, so every table in the document ends
+        # flush with the margins the way the verification reports' do. A short
+        # table floating centred in the middle of the page reads as a
+        # different kind of object from a full-width one.
+        scale = TEXT_WIDTH_IN / sum(widths)
         for i, w in enumerate(widths):
             for row in table.rows:
-                row.cells[i].width = Inches(w)
+                row.cells[i].width = Inches(w * scale)
 
     if caption:
-        add_caption(doc, caption)
+        add_caption(doc, "Table", caption)
     else:
         doc.add_paragraph().paragraph_format.space_after = Pt(6)
     return table
@@ -380,18 +514,19 @@ def bullets(doc, items):
         p.add_run(rest)
 
 
+def numbered(doc, items):
+    for text in items:
+        p = doc.add_paragraph(style="List Number")
+        p.paragraph_format.space_after = Pt(4)
+        p.add_run(text)
+
+
 # Die captures are square, so width is also height. At 6 inches a figure was
 # two thirds of the 9 inch text column, which meant any figure not landing
 # near the top of a page got pushed to the next one and left a hand-sized gap
-# behind it. 4.2 inches flows: two can share a page, and a figure can follow a
-# paragraph instead of displacing it. Resolution improves as a side effect,
-# since the same 1043 px is now 248 dpi rather than 174.
+# behind it. A little over 3 inches flows: two can share a page, and a figure
+# can follow a paragraph instead of displacing it.
 FIG_WIDTH_IN = 3.1
-
-# Figure numbering, so captions read "Figure 3." the way the tables read
-# "Table 3.". A list rather than an int because it is rebound from inside
-# maybe_figure; build() resets it.
-_FIG_N = [0]
 
 
 def maybe_figure(doc, images_dir, key, width_in=None):
@@ -425,8 +560,7 @@ def maybe_figure(doc, images_dir, key, width_in=None):
         # between them.
         p.paragraph_format.keep_with_next = True
         p.add_run().add_picture(str(path), width=Inches(width))
-        _FIG_N[0] += 1
-        add_caption(doc, f"Figure {_FIG_N[0]}. {caption}")
+        add_caption(doc, "Figure", caption)
         return True
     return False
 
@@ -459,9 +593,11 @@ def figure_pair(doc, images_dir, key_left, key_right, width_in=2.85):
     if not have:
         return False
     if len(have) == 1:
-        return maybe_figure(doc, images_dir, key_left if _figure_spec(key_left)[0]
-                            and (Path(images_dir) / _figure_spec(key_left)[0]).exists()
-                            else key_right)
+        only = key_left
+        name, _ = _figure_spec(key_left)
+        if not (name and (Path(images_dir) / name).exists()):
+            only = key_right
+        return maybe_figure(doc, images_dir, only)
 
     table = doc.add_table(rows=1, cols=2)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -476,14 +612,11 @@ def figure_pair(doc, images_dir, key_left, key_right, width_in=2.85):
         p.paragraph_format.space_before = Pt(4)
         p.add_run().add_picture(str(path), width=Inches(width_in))
 
-        _FIG_N[0] += 1
-        c = cell.add_paragraph()
+        _CAP_N["Figure"] += 1
+        c = cell.add_paragraph(style="Caption")
         c.paragraph_format.space_before = Pt(2)
         c.paragraph_format.space_after = Pt(4)
-        r = c.add_run(f"Figure {_FIG_N[0]}. {caption}")
-        r.font.size = Pt(8)
-        r.font.italic = True
-        r.font.color.rgb = INK_3
+        c.add_run(f"Figure {_CAP_N['Figure']}: {caption}")
 
     doc.add_paragraph().paragraph_format.space_after = Pt(6)
     return True
@@ -509,6 +642,46 @@ def i(v, dash="not measured"):
         return str(v)
 
 
+def ps(seconds_ns):
+    """
+    Nanoseconds as a whole number of picoseconds, correctly singular.
+
+    A clock tree that costs exactly one picosecond is a real outcome on a
+    block this small, and 'cost 1 picoseconds' in a signoff document reads
+    as carelessness about everything else in it.
+    """
+    n = round(float(seconds_ns) * 1000)
+    return f"{n} picosecond" if abs(n) == 1 else f"{n} picoseconds"
+
+
+def _int_or_none(v):
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return None
+
+
+def result_banner(d):
+    """
+    The cover's one-line verdict, and the colour it is set in.
+
+    Setup and hold are reported separately because they fail for opposite
+    reasons and a single PASS would hide one behind the other.
+    """
+    setup = d.get("wns_setup")
+    hold_viol = _int_or_none(d.get("n_hold_viol")) or 0
+    setup_viol = _int_or_none(d.get("n_setup_viol")) or 0
+    setup_met = setup not in ("", None) and float(setup) >= 0
+
+    if not setup_met:
+        return (f"TIMING RESULT:  SETUP NOT MET  "
+                f"({setup_viol} paths violated)"), FAIL_RED
+    if hold_viol:
+        return (f"TIMING RESULT:  SETUP MET  ·  "
+                f"{hold_viol} HOLD PATHS VIOLATED"), WARN_AMBER
+    return "TIMING RESULT:  PASS  (0 paths violated)", PASS_GREEN
+
+
 def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
     run_dir = Path(run_dir)
     d = qor.parse_run(run_dir)
@@ -516,42 +689,79 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
     notes_file = run_dir / "NOTES.md"
     note = notes_file.read_text(encoding="utf-8").strip() if notes_file.exists() else ""
 
-    _FIG_N[0] = 0
+    _CAP_N["Figure"] = 0
+    _CAP_N["Table"] = 0
+    _SEC[0] = 0
+    _SEC[1] = 0
+
     doc = Document()
     setup_styles(doc)
-    add_footer(doc, "pipelined_cpu_core")
+    add_header(doc, "Physical Design Report  |  RISC-V Pipelined CPU", author)
+    add_footer(doc)
+    update_fields_on_open(doc)
 
     clk = d.get("clk_ns")
-    freq = f"{1000 / float(clk):.0f} MHz" if clk else "not recorded"
+    clock_line = (f"Clock: {f(clk, 2)} ns ({1000 / float(clk):.0f} MHz)"
+                  if clk else "Clock: not recorded")
 
-    title_block(
+    banner_text, banner_colour = result_banner(d)
+
+    cover_page(
         doc,
-        "From RTL to a Routed Die",
-        "A five-stage RISC-V pipeline carried through Cadence Genus and "
-        "Innovus on a 45 nm standard cell library.",
-        [
-            ("DESIGN  ", "pipelined_cpu_core, five-stage RISC-V, RV32I subset"),
-            ("RUN     ", f"{d.get('run')}   {d.get('date') or ''}"),
-            ("CLOCK   ", f"{f(clk, 2, 'from SDC')} ns   ({freq})"),
-            ("LIBRARY ", "Nangate45, typical corner, QRC extraction"),
-            ("TOOLS   ", "Cadence Genus and Innovus 23.12-s091_1"),
-            ("AUTHOR  ", author),
+        title="Physical Design Report",
+        subtitle="RISC-V Pipelined CPU",
+        tagline="From RTL to a Routed Die on a 45 nm Standard Cell Library",
+        author=author,
+        meta_lines=[
+            "Design: pipelined_cpu_core, five-stage RISC-V, RV32I subset",
+            f"Run: {d.get('run')}    |    {clock_line}",
+            "Library: Nangate45, typical corner, QRC extraction",
+            "Tools: Cadence Genus and Innovus 23.12-s091_1",
+            f"Date: {d.get('date') or 'not recorded'}",
         ],
+        banner_text=banner_text,
+        banner_colour=banner_colour,
+        images_dir=images_dir,
+        cover_key="figure-die",
     )
 
-    # ---------------------------------------------------------------- summary
-    doc.add_heading("Result", level=1)
+    add_toc(doc)
+
+    # ------------------------------------------------------- 1. summary
+    h1(doc, "Executive Summary")
 
     setup = d.get("wns_setup")
     met = (setup not in ("", None)) and float(setup) >= 0
     verdict = "meets setup timing" if met else "does not meet setup timing"
+    # An unparsed clock must not leave "at a  ns clock" in the prose, so the
+    # whole phrase changes shape rather than just the number.
+    at_clock = (f"at a {f(clk, 2)} ns clock" if clk
+                else "at the clock period the SDC constrained it to")
 
     body(doc,
-         f"The design routes to completion and {verdict} at a "
-         f"{f(clk, 2, 'constrained')} ns clock, with a worst negative slack of "
+         f"This report documents the physical implementation of a five-stage "
+         f"pipelined RISC-V CPU (pipelined_cpu_core), carried from RTL to a "
+         f"routed layout through Cadence Genus and Innovus on the Nangate45 "
+         f"45 nm standard cell library. Every number in this document is "
+         f"parsed directly from the run's own reports rather than "
+         f"transcribed.")
+
+    body(doc,
+         f"The design routes to completion and {verdict} "
+         f"{at_clock}, with a worst negative slack of "
          f"{f(setup)} ns on the critical path. It occupies "
          f"{i(d.get('cells'))} standard cells at {f(d.get('density_pct'), 1)} "
          f"percent density, wired with {i(d.get('wire_um'))} microns of copper.")
+
+    hold_viol = _int_or_none(d.get("n_hold_viol")) or 0
+    if met and hold_viol:
+        body(doc,
+             f"Setup is met and hold is not. {hold_viol} hold paths are "
+             f"reported as violated, which is a constraint artefact rather "
+             f"than a physical one: this run modelled a single clock "
+             f"uncertainty for both checks, so the setup margin was subtracted "
+             f"from the hold check as well. Splitting the two uncertainties is "
+             f"the first change made in the next iteration.")
 
     data_table(
         doc,
@@ -571,21 +781,19 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
         ],
         aligns=["l", "r", "l"],
         widths=[2.1, 1.6, 2.5],
-        caption="Table 1. Signoff numbers, parsed directly from the run's own "
-                "reports. Every figure in this document is read from the files "
-                "named in the third column.",
+        caption="Signoff numbers, parsed directly from the run's own reports. "
+                "Every figure in this document is read from the files named in "
+                "the third column.",
     )
 
     if note:
-        doc.add_heading("What changed in this run", level=2)
+        h2(doc, "What Changed in This Run")
         for line in note.split("\n"):
             if line.strip():
                 doc.add_paragraph(line.strip())
 
-    maybe_figure(doc, images_dir, "figure-die")
-
-    # ------------------------------------------------------------------ flow
-    doc.add_heading("What the flow does", level=1)
+    # ---------------------------------------------------------- 2. flow
+    h1(doc, "The Implementation Flow")
 
     body(doc,
          "Synthesis turns Verilog into a netlist: a flat list of logic gates "
@@ -594,6 +802,8 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
          "gate physically sits and what copper connects them. The stages below "
          "run in order, and the design is written to disk after each one so a "
          "late failure never costs the earlier work.")
+
+    h2(doc, "Stages")
 
     data_table(
         doc,
@@ -609,11 +819,11 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
             ["8", "report, defOut", "The reports this document is built from"],
         ],
         aligns=["r", "l", "l"],
-        widths=[0.5, 1.9, 3.8],
-        caption="Table 2. The place-and-route flow, stage by stage.",
+        widths=[0.6, 1.9, 3.7],
+        caption="The place-and-route flow, stage by stage.",
     )
 
-    doc.add_heading("Why the flow is written in Tcl", level=2)
+    h2(doc, "Why the Flow Is Written in Tcl")
 
     body(doc,
          "Innovus is, at its core, a Tcl interpreter. It is a Tcl shell with "
@@ -643,9 +853,9 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
         ],
         aligns=["l", "l", "l", "l"],
         widths=[1.5, 0.8, 0.9, 3.0],
-        caption="Table 3. Three languages, three jobs. The shell script never "
-                "mentions the chip; it confirms the tools and libraries exist "
-                "and hands off.",
+        caption="Three languages, three jobs. The shell script never mentions "
+                "the chip; it confirms the tools and libraries exist and hands "
+                "off.",
     )
 
     body(doc,
@@ -668,8 +878,8 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
          "to iterate on one.",
          bold_lead="Why it is scripted at all. ")
 
-    # ------------------------------------------------------------- where time
-    doc.add_heading("Where the timing went", level=1)
+    # -------------------------------------------------------- 3. timing
+    h1(doc, "Timing")
 
     start = d.get("wns_place_start")
     place, cts, final = d.get("wns_place"), d.get("wns_cts"), d.get("wns_setup")
@@ -681,20 +891,21 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
          "a timing problem lives in synthesis, in placement, in the clock tree "
          "or in the routing.")
 
-    stage_rows = [
-        ["Netlist as placed", "ideal", f(start), "Starting point, before optimisation"],
-        ["place_opt_design", "ideal", f(place), "Placement optimisation"],
-        ["clock_opt_design", "propagated", f(cts), "A real clock tree replaces the ideal one"],
-        ["route_opt_design", "propagated + RC", f"**{f(final)}**", "Real copper, extracted parasitics"],
-    ]
+    h2(doc, "Slack Through the Flow")
+
     data_table(
         doc,
         ["After", "Clock model", "WNS (ns)", "What happened"],
-        stage_rows,
+        [
+            ["Netlist as placed", "ideal", f(start), "Starting point, before optimisation"],
+            ["place_opt_design", "ideal", f(place), "Placement optimisation"],
+            ["clock_opt_design", "propagated", f(cts), "A real clock tree replaces the ideal one"],
+            ["route_opt_design", "propagated + RC", f"**{f(final)}**", "Real copper, extracted parasitics"],
+        ],
         aligns=["l", "l", "r", "l"],
         widths=[1.5, 1.2, 0.9, 2.6],
-        caption="Table 4. Setup slack through the flow. The starting point is "
-                "read from the optimiser's own progress table in "
+        caption="Setup slack through the flow. The starting point is read from "
+                "the optimiser's own progress table in "
                 "reports/um*/flow_QOR_summary.rpt.",
     )
 
@@ -704,14 +915,16 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
         recovered = float(place) - float(start)
         body(doc,
              f"Placement did nearly all of the work. The netlist synthesis "
-             f"handed over was {abs(float(start)) * 1000:.0f} picoseconds short "
+             f"handed over was {ps(abs(float(start)))} short "
              f"the moment real coordinates existed, and placement optimisation "
-             f"recovered {recovered * 1000:.0f} picoseconds of that. Building "
-             f"the actual clock tree cost {cts_cost * 1000:.0f} picoseconds and "
-             f"routing real wires cost a further {route_cost * 1000:.0f}.",
+             f"recovered {ps(recovered)} of that. Building "
+             f"the actual clock tree cost {ps(cts_cost)} and "
+             f"routing real wires cost a further {ps(route_cost)}.",
              bold_lead="Reading the table. ")
     except (TypeError, ValueError):
         pass
+
+    h2(doc, "Where the Time Actually Goes")
 
     body(doc,
          "The worst path launches from a register in MEM/WB, crosses the "
@@ -721,10 +934,11 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
          "2.863 ns that path takes, 2.123 ns is the carry chain alone: "
          "74 percent of the clock period sits in one ripple-carry adder. "
          "That is the single change worth making to the design, and the adder "
-         "is under 3 percent of the area, so speed there is cheap.",
-         bold_lead="Where the time actually goes. ")
+         "is under 3 percent of the area, so speed there is cheap.")
 
     figure_pair(doc, images_dir, "figure-clock", "figure-path")
+
+    h2(doc, "What This Number Does Not Tell You")
 
     body(doc,
          "A run that meets timing does not tell you what was achievable. The "
@@ -732,11 +946,12 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
          "stops, and its area reclaiming passes deliberately spend positive "
          "slack to recover area and leakage. Synthesis stops trying at the "
          "same constraint. Finding the real maximum frequency means tightening "
-         "the period and rerunning both tools until it fails.",
-         bold_lead="An important limit on this number. ")
+         "the period and rerunning both tools until it fails.")
 
-    # ---------------------------------------------------------------- physical
-    doc.add_heading("The physical result", level=1)
+    # ------------------------------------------------------ 4. physical
+    h1(doc, "The Physical Result")
+
+    h2(doc, "Cells and Fillers")
 
     body(doc,
          f"The core holds {i(d.get('cells'))} standard cells of real logic "
@@ -747,6 +962,7 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
          f"break and the design is not manufacturable.")
 
     if layers:
+        h2(doc, "Routing by Metal Layer")
         total = sum(layers.values()) or 1
         rows = []
         for n in range(1, 11):
@@ -758,12 +974,13 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
         data_table(
             doc, ["Layer", "Wire length (um)", "Share"], rows,
             aligns=["l", "r", "r"], widths=[1.2, 1.6, 1.0],
-            caption="Table 5. Routing by metal layer. metal1 carries no signal "
-                    "because it is reserved for wiring inside the cells and for "
-                    "the power rails. The upper layers are nearly empty because "
-                    "a block this small has no journeys long enough to need them.",
+            caption="Routing by metal layer. metal1 carries no signal because "
+                    "it is reserved for wiring inside the cells and for the "
+                    "power rails. The upper layers are nearly empty because a "
+                    "block this small has no journeys long enough to need them.",
         )
 
+    h2(doc, "The Power Grid")
 
     body(doc,
          "The power grid is worth seeing on its own, because none of it comes "
@@ -779,6 +996,7 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
     muxed = d.get("flops_muxed")
     muxed_um2 = d.get("flops_muxed_um2")
     if muxed and muxed_um2 and d.get("logic_um2"):
+        h2(doc, "Where the Area Actually Goes")
         share = 100 * float(muxed_um2) / float(d["logic_um2"])
         body(doc,
              f"Of the {i(d.get('flops'))} flip-flops, {i(muxed)} are SDFF, a "
@@ -789,14 +1007,13 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
              f"{f(muxed_um2, 0)} um2, or {share:.0f} percent of all logic area, "
              f"and the multiplexer tree that reads them adds more. "
              f"The structure that dominates the area and the structure that "
-             f"dominates the clock are different parts of the design.",
-             bold_lead="Where the area actually goes. ")
+             f"dominates the clock are different parts of the design.")
 
     maybe_figure(doc, images_dir, "figure-modules", width_in=2.7)
     maybe_figure(doc, images_dir, "figure-congestion")
 
-    # -------------------------------------------------------------------- gaps
-    doc.add_heading("What a production flow has that this one does not", level=1)
+    # ---------------------------------------------------------- 5. gaps
+    h1(doc, "What a Production Flow Has That This One Does Not")
 
     body(doc,
          "The structure of this flow matches industry practice. The rigour "
@@ -830,15 +1047,44 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
          "once for the understanding."),
     ])
 
-    # ------------------------------------------------------------ reproducing
-    doc.add_heading("Reproducing this run", level=1)
+    # ---------------------------------------------------- 6. conclusion
+    h1(doc, "Conclusion")
+
+    body(doc,
+         f"The five-stage pipelined RISC-V CPU reaches a routed layout on "
+         f"Nangate45 and {verdict} {at_clock}, "
+         f"closing at {f(setup)} ns of "
+         f"setup slack across {i(d.get('cells'))} standard cells and "
+         f"{i(d.get('wire_um'))} microns of copper. The flow that produced it "
+         f"is scripted end to end, so the result is reproducible from the "
+         f"repository alone.")
+
+    body(doc,
+         "Two things are worth carrying forward. The first is that placement, "
+         "not routing, did almost all of the timing work, which says the "
+         "netlist handed over by synthesis was physically reasonable and that "
+         "the remaining margin will not be found by tuning the back end. The "
+         "second is that the critical path is dominated by a single "
+         "ripple-carry chain in the ALU while the area is dominated by the "
+         "register file, so the change that buys speed and the change that "
+         "buys area are different changes to different parts of the design.")
+
+    body(doc,
+         "The number this run cannot supply is the maximum achievable "
+         "frequency, because an optimiser that meets its constraint stops "
+         "there. Establishing it means sweeping the clock period until the "
+         "design fails, and that sweep is what the per-run directory structure "
+         "and the generated results table exist to support.")
+
+    # ------------------------------------------------------- appendix A
+    appendix(doc, "A", "Reproducing This Run")
 
     body(doc,
          "The run is fully described by the scripts in the repository. Every "
          "report quoted above is committed under results/ so each number can "
          "be checked against its source.")
 
-    code_block(doc,
+    mono_block(doc,
                "./run.sh --period {p} --name {n} --note \"...\"\n"
                "\n"
                "runs/{n}/reports/     the reports this document parses\n"
@@ -846,21 +1092,12 @@ def build(run_dir, out_path, images_dir=None, author="Elliot Staresinic"):
                "results/QOR.md        one row per run, for comparing iterations"
                .format(p=f(clk, 1, "3.0"), n=d.get("run")))
 
-    p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(8)
-    para_rule(p, color="14181D", size=12)
-
-    for line in [
-        f"Generated from {d.get('run')} by scripts/make_report.py. Numbers are "
-        f"parsed from the run's reports, not transcribed.",
-        "Repository: estaresinic05/Silicon-From-Scratch",
-    ]:
-        p = doc.add_paragraph()
-        p.paragraph_format.space_after = Pt(1)
-        r = p.add_run(line)
-        r.font.name = MONO_FONT
-        r.font.size = Pt(8)
-        r.font.color.rgb = INK_3
+    body(doc,
+         f"This document was generated from {d.get('run')} by "
+         f"scripts/make_report.py. The numbers are parsed from the run's "
+         f"reports, not transcribed, so regenerating it after a rerun cannot "
+         f"produce a document that disagrees with its own evidence. "
+         f"Repository: estaresinic05/Silicon-From-Scratch.")
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)

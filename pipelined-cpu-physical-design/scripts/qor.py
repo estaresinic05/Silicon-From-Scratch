@@ -200,12 +200,29 @@ def parse_flow_qor(run_dir):
 
 
 def parse_clock(run_dir):
-    """Clock period out of the SDC Genus wrote, which is the one Innovus used."""
-    for sdc in list(run_dir.glob("out/*.sdc")):
+    """
+    Clock period out of the SDC Genus wrote, which is the one Innovus used.
+
+    Two places, because a run is read from two shapes. A live run has the
+    file in out/ exactly where Genus left it. An ARCHIVED run under results/
+    has it at the top level, put there by archive_reports, because out/ is
+    gitignored and never travels. Looking in only the first place is what
+    made a regenerated report print 'not recorded' for its own clock.
+
+    RUN.env is the last resort: run.sh writes CLK_PERIOD into it so a
+    resumed run cannot lie about what it was built at.
+    """
+    for sdc in sorted(run_dir.glob("out/*.sdc")) + sorted(run_dir.glob("*.sdc")):
         text = _read(sdc)
         if text is None:
             continue
         m = re.search(r"create_clock.*?-period\s+([\d.]+)", text, re.S)
+        if m:
+            return float(m.group(1))
+
+    text = _read(run_dir / "RUN.env")
+    if text:
+        m = re.search(r"CLK_PERIOD=([\d.]+)", text)
         if m:
             return float(m.group(1))
     return None
@@ -347,6 +364,23 @@ def archive_reports(run_dir, results_dir):
     for qor in run_dir.glob("reports/um*/flow_QOR_summary.rpt"):
         shutil.copy2(qor, dest / f"{qor.parent.name}_flow_QOR_summary.rpt")
         n += 1
+
+    # The elaborated SDC, beside the reports rather than under reports/.
+    #
+    # This is what makes an archived run self-describing. parse_clock reads
+    # the period out of the SDC Genus WROTE, because the source constraint
+    # file holds '-period $CLK_PERIOD', a Tcl variable that no regex for
+    # digits can match. That file lives in the run's out/, which is
+    # gitignored and disposable, so a report regenerated from results/ used
+    # to have no clock at all and printed 'not recorded' on its cover. It is
+    # 27 KB of text and it is the definition of what the run was asked to do.
+    for sdc in sorted(run_dir.glob("out/*.sdc")):
+        shutil.copy2(sdc, results_dir / run_dir.name / sdc.name)
+        n += 1
+    env = run_dir / "RUN.env"
+    if env.exists():
+        shutil.copy2(env, results_dir / run_dir.name / "RUN.env")
+        n += 1
     return n, dest
 
 
@@ -355,7 +389,11 @@ def archive_reports(run_dir, results_dir):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    # dest= plus the explicit check below, NOT add_subparsers(required=True),
+    # which argparse only accepts from Python 3.7. nanoHUB runs 3.6, and this
+    # file has to run there: it is what turns a finished run into a row of the
+    # results table. Nothing else in this script needs anything newer.
+    sub = ap.add_subparsers(dest="cmd")
 
     c = sub.add_parser("collect", help="read a run directory, append a row")
     c.add_argument("run_dir")
@@ -366,6 +404,8 @@ def main():
     t.add_argument("--root", default=None)
 
     args = ap.parse_args()
+    if not args.cmd:
+        ap.error("a subcommand is required: collect or table")
     root = Path(args.root) if args.root else Path(__file__).resolve().parent.parent
     results = root / "results"
     csv_path = results / "qor.csv"
