@@ -1,20 +1,46 @@
 #!/bin/bash
 #############################################################################
-# pipelined-cpu-pnr: RTL to routed layout, one command.
+# pipelined-cpu-pnr: RTL to routed layout, one command per experiment.
 #
-#   ./run.sh          synthesis, then place and route
-#   ./run.sh syn      synthesis only
-#   ./run.sh pnr      place and route only (needs synthesis to have run)
-#   ./run.sh gds      fetch the Nangate45 stream file so a GDSII can be made
+#   ./run.sh                                 full flow at the default clock
+#   ./run.sh --period 2.5 --note "tighten"   full flow at 2.5 ns
+#   ./run.sh --name baseline --note "..."    name the run yourself
+#   ./run.sh --name baseline --from cts      resume an existing run at CTS
+#   ./run.sh gds                             fetch the Nangate45 stream file
+#   ./run.sh table                           rebuild results/QOR.md
 #
-# Everything runs in work/. Delete that directory to start clean.
+# EVERY RUN GETS ITS OWN DIRECTORY under runs/, so a second experiment can
+# never destroy the first one's reports. That was the whole problem with
+# building in a single work/: the comparison a sweep exists to produce was
+# being overwritten by the next step of the sweep.
+#
+#   runs/<name>/     out/ reports/ enc/ and the DEF. Big, gitignored.
+#   results/<name>/  the small text reports, copied out. Committed.
+#   results/qor.csv  one row per run. Committed.
+#   results/QOR.md   the table you actually read. Generated, never edited.
 #############################################################################
 
 set -e
 cd "$(dirname "$0")"
 ROOT=$(pwd)
+export PNR_ROOT="$ROOT"
 
 NG45=$HOME/MacroPlacement/Enablements/NanGate45
+
+PERIOD=3.0
+NAME=""
+FROM="syn"
+NOTE=""
+DO_QOR=1
+
+# Stage order, including synthesis. Anything after 'syn' is an Innovus stage
+# and is handed to innovus.tcl as START_STAGE.
+STAGES="syn floorplan power place cts route report"
+
+usage() {
+    sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
 
 #---------------------------------------------------------------------------
 # Preflight. Every one of these has bitten someone.
@@ -48,25 +74,36 @@ preflight() {
     echo "Preflight OK."
 }
 
+# Is stage $1 at or after the requested start?
+stage_index() {
+    local i=0
+    for s in $STAGES; do
+        [ "$s" = "$1" ] && { echo $i; return; }
+        i=$((i + 1))
+    done
+    echo -1
+}
+
 #---------------------------------------------------------------------------
 run_syn() {
-    echo "=== SYNTHESIS (Genus) ==========================================="
-    mkdir -p work && cd work
-    genus -files ../scripts/genus.tcl -log genus
-    cd "$ROOT"
-    echo "=== synthesis done. reports in reports/ ========================="
+    echo "=== SYNTHESIS (Genus) at ${PERIOD} ns ==========================="
+    genus -files "$ROOT/scripts/genus.tcl" -log genus
+    echo "=== synthesis done =============================================="
 }
 
 run_pnr() {
-    echo "=== PLACE AND ROUTE (Innovus) ==================================="
+    echo "=== PLACE AND ROUTE (Innovus), from '${1}' ======================"
     if [ ! -f out/pipelined_cpu_core_netlist.v ]; then
-        echo "No netlist found. Run './run.sh syn' first."
+        echo "No netlist in $(pwd)/out. Run synthesis for this run first."
         exit 1
     fi
-    mkdir -p work && cd work
-    innovus -files ../scripts/innovus.tcl -log innovus
-    cd "$ROOT"
-    echo "=== place and route done ======================================="
+    START_STAGE="$1" innovus -files "$ROOT/scripts/innovus.tcl" -log innovus
+    echo "=== place and route done ========================================"
+}
+
+collect() {
+    command -v python3 >/dev/null 2>&1 || { echo "python3 not found, skipping QOR"; return; }
+    python3 "$ROOT/scripts/qor.py" collect "$ROOT/runs/$NAME" --note "$NOTE" --root "$ROOT"
 }
 
 get_gds() {
@@ -78,10 +115,80 @@ get_gds() {
 }
 
 #---------------------------------------------------------------------------
-case "${1:-all}" in
-    syn) preflight; run_syn ;;
-    pnr) preflight; run_pnr ;;
-    gds) get_gds ;;
-    all) preflight; run_syn; run_pnr ;;
-    *)   echo "usage: $0 [syn|pnr|gds|all]"; exit 1 ;;
+# Argument parsing
+#---------------------------------------------------------------------------
+case "${1:-}" in
+    gds)   get_gds; exit 0 ;;
+    table) python3 "$ROOT/scripts/qor.py" table --root "$ROOT"; exit 0 ;;
+    -h|--help) usage 0 ;;
 esac
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --period) PERIOD="$2"; shift 2 ;;
+        --name)   NAME="$2";   shift 2 ;;
+        --from)   FROM="$2";   shift 2 ;;
+        --note)   NOTE="$2";   shift 2 ;;
+        --no-qor) DO_QOR=0;    shift ;;
+        *) echo "unknown option: $1"; echo; usage 1 ;;
+    esac
+done
+
+[ "$(stage_index "$FROM")" -ge 0 ] || {
+    echo "--from must be one of: $STAGES"; exit 1; }
+
+# Default run name is the clock it was run at, which is the thing that
+# usually differs. clk3p0, clk2p5, and so on.
+[ -n "$NAME" ] || NAME="clk$(echo "$PERIOD" | tr '.' 'p')"
+
+export CLK_PERIOD="$PERIOD"
+
+RUNDIR="$ROOT/runs/$NAME"
+
+if [ "$FROM" = "syn" ] && [ -d "$RUNDIR" ]; then
+    echo "NOTE: runs/$NAME already exists and will be rebuilt from synthesis."
+    echo "      Its archived reports in results/$NAME/ are not touched."
+fi
+
+mkdir -p "$RUNDIR"
+cd "$RUNDIR"
+
+# A run remembers the clock it was built at. Resuming one without repeating
+# --period would otherwise silently re-export the default, and while Innovus
+# reads the period out of the SDC Genus already wrote and so would be
+# unaffected, the run banner would lie about what you were looking at.
+if [ "$FROM" = "syn" ]; then
+    echo "CLK_PERIOD=$PERIOD" > RUN.env
+elif [ -f RUN.env ]; then
+    . ./RUN.env
+    PERIOD="$CLK_PERIOD"
+    export CLK_PERIOD
+fi
+
+echo "=================================================================="
+echo " run     $NAME"
+echo " clock   $PERIOD ns"
+echo " from    $FROM"
+echo " dir     $RUNDIR"
+echo "=================================================================="
+
+preflight
+
+FROM_IDX=$(stage_index "$FROM")
+
+# Synthesis, if we are starting at or before it.
+if [ "$FROM_IDX" -le 0 ]; then
+    run_syn
+    PNR_START="floorplan"
+else
+    PNR_START="$FROM"
+fi
+
+run_pnr "$PNR_START"
+
+cd "$ROOT"
+[ "$DO_QOR" -eq 1 ] && collect
+
+echo
+echo "Reports:  runs/$NAME/reports/40_final_setup.rpt"
+echo "Table:    results/QOR.md"

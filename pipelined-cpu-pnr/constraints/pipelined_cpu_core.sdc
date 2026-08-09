@@ -12,12 +12,37 @@
 # last value that passed post-route is the real number.
 #############################################################################
 
-set CLK_PERIOD 3.0
+# The period comes from the environment when run.sh sets it, so a sweep is a
+# loop rather than eleven hand edits and a lost comparison. Running the tools
+# directly with nothing in the environment gets the default below.
+#
+# Only Genus reads this file. Innovus reads the SDC Genus writes out, which
+# already has the period baked in, so setting it once here carries it through
+# the whole flow.
+if {[info exists env(CLK_PERIOD)]} {
+    set CLK_PERIOD $env(CLK_PERIOD)
+} else {
+    set CLK_PERIOD 3.0
+}
 
 create_clock -name clk -period $CLK_PERIOD [get_ports clk]
 
 # Modelled uncertainty stands in for jitter and, before CTS, for skew.
-set_clock_uncertainty 0.10 [get_clocks clk]
+#
+# Setup and hold get separate numbers, and they must. An unqualified
+# set_clock_uncertainty applies to BOTH checks, which sounds conservative
+# and is not, because the two checks use it with opposite sign. For setup
+# it comes out of the budget, which is the pessimism you want. For hold it
+# is ADDED to the requirement, so it demands the data arrive later than
+# physics needs.
+#
+# The 08 Aug run reported ten violated hold paths between -0.011 and
+# -0.014 ns. Every one was manufactured here: a 0.10 ns hold margin sitting
+# on top of a 0.012 ns flip-flop requirement that the design already met
+# with 0.085 ns to spare. 0.02 ns is a realistic figure for jitter alone,
+# which is all hold has to cover once the clock tree is real.
+set_clock_uncertainty -setup 0.10 [get_clocks clk]
+set_clock_uncertainty -hold  0.02 [get_clocks clk]
 set_clock_transition  0.05 [get_clocks clk]
 
 # reset is asynchronous by design, so it is not a timed path.

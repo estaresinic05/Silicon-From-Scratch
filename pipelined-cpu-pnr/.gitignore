@@ -1,11 +1,16 @@
-# Everything the flow generates. None of it belongs in the repo: the run is
-# reproducible from the scripts, and the databases are large and binary.
+# A run's working output lives in runs/<name>/ and is entirely disposable.
+# The run is reproducible from the scripts, and the saved databases are
+# hundreds of megabytes of binary.
+runs/
+
+# The old single-run layout, and what you get running the tools by hand
+# rather than through run.sh.
 work/
 out/
 reports/
+
 *.log
 *.cmd
-*.rpt
 *.def
 *.gds
 *.enc
@@ -14,3 +19,21 @@ reports/
 innovus_temp*/
 genus_temp*/
 fe_output/
+
+# results/ is COMMITTED on purpose, and the rules above would otherwise
+# swallow it. It carries the small text reports copied out of each run plus
+# qor.csv and QOR.md. Those are the evidence behind every number quoted in
+# the README or in any write-up, and a claim whose report is not in the repo
+# is a claim nobody can check.
+!results/**
+
+# Python bytecode from the helper scripts.
+__pycache__/
+*.pyc
+
+# Word lock files.
+~$*
+
+# Pre-crop backups kept by scripts/crop_shots.py. Useful locally, not worth
+# committing beside the cropped versions.
+*.orig.png

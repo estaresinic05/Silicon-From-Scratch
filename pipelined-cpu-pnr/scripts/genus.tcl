@@ -3,7 +3,11 @@
 #
 # Author: Elliot Staresinic
 #
-# Run from pipelined-cpu-pnr/work:   genus -files ../scripts/genus.tcl
+# Run from a run directory:   genus -files $PNR_ROOT/scripts/genus.tcl
+#
+# Outputs land in the CURRENT directory, inputs come from $PNR_ROOT. That is
+# what lets several runs coexist: each one owns its out/ and reports/ and
+# nothing is shared but the source.
 #
 # This replaces the yosys run in Verilog/CPU/sta. The design is identical,
 # so the two are directly comparable, and any difference is the synthesiser
@@ -16,10 +20,19 @@
 
 set NG45    $env(HOME)/MacroPlacement/Enablements/NanGate45
 set DESIGN  pipelined_cpu_core
-set RTL     ../rtl
-set SDC     ../constraints/${DESIGN}.sdc
-set OUT     ../out
-set RPT     ../reports
+
+# Sources are read from the project root, results are written where we stand.
+# PNR_ROOT is set by run.sh; the fallback keeps a hand run from work/ working.
+if {[info exists env(PNR_ROOT)]} {
+    set ROOT $env(PNR_ROOT)
+} else {
+    set ROOT ..
+}
+
+set RTL     $ROOT/rtl
+set SDC     $ROOT/constraints/${DESIGN}.sdc
+set OUT     out
+set RPT     reports
 
 file mkdir $OUT
 file mkdir $RPT
