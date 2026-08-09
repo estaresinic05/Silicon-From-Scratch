@@ -3,10 +3,27 @@
 Physical design copy of the five stage pipelined RISC-V CPU. RTL to routed
 layout on Nangate45, using Cadence Genus and Innovus.
 
+<p align="center">
+  <img src="docs/images/die-routed.png" width="47%" alt="The routed core: 93 rows of standard cells filling a 131 by 130 micron square, signal routing on metal2 through metal6, and the power ring on metal8 and metal9.">
+  <img src="docs/images/die-zoom.png" width="47%" alt="A few standard cell rows zoomed until individual cells resolve, with the metal1 power rails running along each row boundary.">
+</p>
+
+<p align="center">
+  <em>Left: the routed core, 131.29 &times; 130.2 &micro;m, 4,321 standard cells in
+  93 rows at 69.7% density, wired with 79,481 &micro;m of copper. Meets setup
+  timing at 333 MHz with 9 ps to spare.<br>
+  Right: the same layout zoomed until individual cells resolve. The horizontal
+  lines are the metal1 power rails that every cell straddles.</em>
+</p>
+
 **This is a separate copy on purpose.** `Verilog/CPU/pipelined-cpu/` is the
 verified simulation design and nothing here touches it. That design passes its
 testbench at 34 retirements in 48 cycles and should stay pinned. This copy will
 drift as physical design demands things simulation does not care about.
+
+The numbers above, and every number below, come from the reports in
+`results/00-baseline/reports/`, which are committed so each one can be checked
+against its source. `results/QOR.md` carries one row per run.
 
 ---
 
