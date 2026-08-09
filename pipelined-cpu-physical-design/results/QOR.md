@@ -9,7 +9,8 @@ that clock. Frozen reports for every run are in `results/<run>/reports/`.
 
 | Run | Clk | Setup WNS | Hold WNS | Hold viol | Cells | Density | Wire | Note |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `00-baseline` | - | 0.009 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
+| `00-baseline` | 3.00 | 0.009 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
+| `01-split-uncertainty` | 3.00 | 0.009 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
 
 ## Stage progression
 
@@ -19,3 +20,4 @@ problem is in synthesis, in placement, in the clock tree or in the routing.
 | Run | Placed | After CTS | Post-route | CTS cost | Route cost |
 |---|---:|---:|---:|---:|---:|
 | `00-baseline` | 0.019 | 0.018 | 0.009 | 0.001 | 0.009 |
+| `01-split-uncertainty` | 0.019 | 0.018 | 0.009 | 0.001 | 0.009 |

@@ -295,6 +295,28 @@ def _int(v):
         return str(v)
 
 
+def _viol(v):
+    """A violation count. 0 is a result, not a missing value."""
+    if v in ("", None):
+        return "-"
+    try:
+        return str(int(float(v)))
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _one_line(note):
+    """
+    A note, flattened to one line and stripped of pipes.
+
+    A markdown table row is terminated by its newline, so a note carrying one
+    splits the row in half and corrupts every column after it. Notes come off
+    a command line typed into a VNC xterm, which is exactly where a stray
+    newline gets in.
+    """
+    return " ".join((note or "").replace("|", "/").split())
+
+
 def write_markdown(rows, md_path):
     """
     The iteration table. One row per run, newest last, so the trend reads
@@ -312,11 +334,15 @@ def write_markdown(rows, md_path):
                 clk=_fmt(r.get("clk_ns"), 2),
                 ws=_fmt(r.get("wns_setup")),
                 wh=_fmt(r.get("wns_hold")),
-                nh=r.get("n_hold_viol") or "-",
+                # NOT `or "-"`: zero is falsy, so a run with no hold
+                # violations rendered as "-" and read as missing data. Zero
+                # violations is the whole point of a hold fix and it has to
+                # show as 0. "-" is reserved for genuinely absent.
+                nh=_viol(r.get("n_hold_viol")),
                 cells=_int(r.get("cells")),
                 den=(_fmt(r.get("density_pct"), 1) + "%") if r.get("density_pct") else "-",
                 wire=_int(r.get("wire_um")),
-                note=(r.get("note") or "").replace("|", "/"),
+                note=_one_line(r.get("note")),
             )
         )
 
@@ -351,19 +377,33 @@ def write_markdown(rows, md_path):
     md_path.write_text(body, encoding="utf-8")
 
 
+def _copy(src, dst):
+    """
+    Copy one file, returning 1 if it was copied and 0 if there was nothing
+    to do.
+
+    Re-collecting an ARCHIVED run points src and dst at the same file, and
+    shutil raises SameFileError. Re-parsing an archived run is a legitimate
+    thing to do — it is how a run picks up a parser fix without the tools —
+    so it has to be a no-op rather than a crash.
+    """
+    if not src.exists():
+        return 0
+    if dst.exists() and src.resolve() == dst.resolve():
+        return 0
+    shutil.copy2(src, dst)
+    return 1
+
+
 def archive_reports(run_dir, results_dir):
     """Copy the small text reports somewhere they can be committed."""
     dest = results_dir / run_dir.name / "reports"
     dest.mkdir(parents=True, exist_ok=True)
     n = 0
     for name in KEEP:
-        src = run_dir / "reports" / name
-        if src.exists():
-            shutil.copy2(src, dest / name)
-            n += 1
+        n += _copy(run_dir / "reports" / name, dest / name)
     for qor in run_dir.glob("reports/um*/flow_QOR_summary.rpt"):
-        shutil.copy2(qor, dest / f"{qor.parent.name}_flow_QOR_summary.rpt")
-        n += 1
+        n += _copy(qor, dest / f"{qor.parent.name}_flow_QOR_summary.rpt")
 
     # The elaborated SDC, beside the reports rather than under reports/.
     #
@@ -375,12 +415,8 @@ def archive_reports(run_dir, results_dir):
     # to have no clock at all and printed 'not recorded' on its cover. It is
     # 27 KB of text and it is the definition of what the run was asked to do.
     for sdc in sorted(run_dir.glob("out/*.sdc")):
-        shutil.copy2(sdc, results_dir / run_dir.name / sdc.name)
-        n += 1
-    env = run_dir / "RUN.env"
-    if env.exists():
-        shutil.copy2(env, results_dir / run_dir.name / "RUN.env")
-        n += 1
+        n += _copy(sdc, results_dir / run_dir.name / sdc.name)
+    n += _copy(run_dir / "RUN.env", results_dir / run_dir.name / "RUN.env")
     return n, dest
 
 
