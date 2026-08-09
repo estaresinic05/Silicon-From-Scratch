@@ -22,8 +22,10 @@ testbench at 34 retirements in 48 cycles and should stay pinned. This copy will
 drift as physical design demands things simulation does not care about.
 
 The numbers above, and every number below, come from the reports in
-`results/02-clk2p8/reports/`, which are committed so each one can be checked
-against its source. `results/QOR.md` carries one row per run.
+`results/03-ring-fix/reports/`, which are committed so each one can be checked
+against its source. That run is the current best: 2.8 ns met post-route, clean
+connectivity, and **zero DRC violations**. `results/QOR.md` carries one row per
+run.
 
 ---
 

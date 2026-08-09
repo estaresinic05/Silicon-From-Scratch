@@ -2,3 +2,4 @@ run,note,clk_ns,date,wns_place,wns_cts,wns_hold_cts,wns_setup,wns_hold,n_setup_v
 00-baseline,first clean end-to-end pass; clock uncertainty not yet split,3.0,Sat Aug  8 17:07:41 2026,0.019,0.018,-0.015,0.009,-0.014,0,10,4321,7236,1347,11909.618,17093.958,69.672,79481.345,-0.272
 01-split-uncertainty,"hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations",3.0,Sun Aug  9 17:49:35 2026,0.019,0.018,0.065,0.009,0.066,0,0,4321,7236,1347,11909.618,17093.958,69.672,79481.345,-0.272
 02-clk2p8,"clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations",2.8,Sun Aug  9 21:52:56 2026,0.001,0.0,0.066,0.002,0.066,0,0,4332,7413,1347,11918.928,17093.958,69.726,73127.43,-0.339
+03-ring-fix,"ring spacing 1.5um, clears the four MetSpc violations",2.8,Sun Aug  9 23:49:40 2026,0.001,0.0,0.066,0.002,0.066,0,0,4332,7413,1347,11918.928,17093.958,69.726,73127.43,-0.339
