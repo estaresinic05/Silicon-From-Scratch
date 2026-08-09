@@ -1,4 +1,4 @@
-# pipelined-cpu-physical-design
+# Pipelined CPU Physical Design
 
 Physical design copy of the five stage pipelined RISC-V CPU. RTL to routed
 layout on Nangate45, using Cadence Genus and Innovus.
