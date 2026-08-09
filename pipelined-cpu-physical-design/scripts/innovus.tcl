@@ -194,9 +194,21 @@ if {[run_from power]} {
     # Nangate45 preferred directions alternate: odd layers horizontal, even
     # vertical. So a ring's top and bottom run on metal9 and its sides on
     # metal8, and vertical straps go on metal8.
+    # -spacing 1.5, not 1. Both layers carry a PARALLELRUNLENGTH spacing table
+    # in NangateOpenCellLibrary.tech.lef, and a wide wire running a long way
+    # beside another one needs more room than the default 0.4/0.8:
+    #
+    #   metal8  WIDTH >= 1.5, run >= 4.0  ->  1.5
+    #   metal9  WIDTH >= 1.5, run >= 4.0  ->  1.5
+    #
+    # These rings are 2 um wide and run about 137 um, so both land in the
+    # last row and last column of their table. At -spacing 1 that produced
+    # four MetSpc violations, one per side, each with a violation box exactly
+    # 1.000 um wide, which is the gap itself. They were the only DRC errors in
+    # the design and they were never in the signal routing.
     addRing -nets {VDD VSS} -type core_rings -follow core \
             -layer {top metal9 bottom metal9 left metal8 right metal8} \
-            -width 2 -spacing 1 -offset 1
+            -width 2 -spacing 1.5 -offset 1
 
     addStripe -nets {VDD VSS} -layer metal8 -direction vertical \
               -width 1 -spacing 1 -set_to_set_distance 25 -start_offset 8
