@@ -34,6 +34,6 @@ __pycache__/
 # Word lock files.
 ~$*
 
-# Pre-crop backups kept by scripts/crop_shots.py. Useful locally, not worth
-# committing beside the cropped versions.
+# Uncropped originals of the screenshots. Useful locally, not worth
+# committing beside the cropped versions that go in the README.
 *.orig.png

@@ -9,9 +9,9 @@ layout on Nangate45, using Cadence Genus and Innovus.
 </p>
 
 <p align="center">
-  <em>Left: the routed core, 131.29 &times; 130.2 &micro;m, 4,321 standard cells in
-  93 rows at 69.7% density, wired with 79,481 &micro;m of copper. Meets setup
-  timing at 333 MHz with 9 ps to spare.<br>
+  <em>Left: the routed core, 131.29 &times; 130.2 &micro;m, 4,332 standard cells in
+  93 rows at 69.7% density, wired with 73,127 &micro;m of copper. Meets setup
+  timing at 357 MHz with 2 ps to spare.<br>
   Right: the same layout zoomed until individual cells resolve. The horizontal
   lines are the metal1 power rails that every cell straddles.</em>
 </p>
@@ -22,7 +22,7 @@ testbench at 34 retirements in 48 cycles and should stay pinned. This copy will
 drift as physical design demands things simulation does not care about.
 
 The numbers above, and every number below, come from the reports in
-`results/00-baseline/reports/`, which are committed so each one can be checked
+`results/02-clk2p8/reports/`, which are committed so each one can be checked
 against its source. `results/QOR.md` carries one row per run.
 
 ---
@@ -126,15 +126,8 @@ python3 scripts/qor.py collect runs/<name> --note "what changed"
 python3 scripts/qor.py table
 ```
 
-A formatted Word report for any run, with every number parsed out of that run's
-own reports rather than transcribed:
-
-```
-python3 scripts/make_report.py --run runs/<name> --images docs/images
-```
-
-Screenshots dropped into `docs/images/` under the filenames listed in its
-README are placed automatically, each with its caption.
+`docs/pnr-report.pdf` is the written form of one run, with the floorplan, the
+power grid, the clock tree and the timing walked through in full.
 
 ---
 
@@ -191,6 +184,14 @@ last value that passed post-route is the real number.
 ./run.sh --period 2.5 --note "sweep step 1"
 ./run.sh --period 2.2 --note "sweep step 2"
 ```
+
+**Where the sweep has got to: 2.8 ns passes post-route with 2 ps to spare.**
+The worst path launches out of the writeback stage, crosses the forwarding
+comparators into the ALU operand mux, and then spends 2.12 ns of its 2.85 ns
+walking the carry chain of the 32-bit ripple-carry adder. That one chain is 74%
+of the clock while the adder is under 3% of the area, and because it is
+instantiated structurally the synthesiser cannot restructure out of it. The next
+real gain is a different adder, not a tighter constraint.
 
 Both Genus and Innovus rerun at each step, and they must: synthesis targets the
 constraint too, so a netlist built for 3.0 ns has no reason to be any faster

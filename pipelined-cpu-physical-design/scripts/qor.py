@@ -405,6 +405,21 @@ def archive_reports(run_dir, results_dir):
     for qor in run_dir.glob("reports/um*/flow_QOR_summary.rpt"):
         n += _copy(qor, dest / f"{qor.parent.name}_flow_QOR_summary.rpt")
 
+    # DRC and connectivity.
+    #
+    # These two are the only checks in the flow that innovus.tcl does not
+    # redirect, which for a long time was read as "they print to stdout only"
+    # and cost a hand extraction out of innovus.log every run. They do not.
+    # verify_drc and verify_connectivity each write a default-named report
+    # into the run directory rather than into reports/, which is the only
+    # reason they were missed: <design>.geom.rpt and <design>.conn.rpt. They
+    # are about 1 KB together against 36 KB for the log dump, and unlike the
+    # log they carry the violating coordinates.
+    for geom in run_dir.glob("*.geom.rpt"):
+        n += _copy(geom, dest / "45_drc.rpt")
+    for conn in run_dir.glob("*.conn.rpt"):
+        n += _copy(conn, dest / "46_connectivity.rpt")
+
     # The elaborated SDC, beside the reports rather than under reports/.
     #
     # This is what makes an archived run self-describing. parse_clock reads

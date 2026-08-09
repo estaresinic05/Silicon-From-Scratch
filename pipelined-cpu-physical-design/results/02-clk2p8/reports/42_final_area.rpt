@@ -1,36 +1,36 @@
     Hinst Name                               Module Name              Inst Count           Total Area
 --------------------------------------------------------------------------------------------------
-pipelined_cpu_core                                                          4321            11909.618
+pipelined_cpu_core                                                          4332            11918.928
   ALU_forward                                alu_fwd_unit                     37               51.338
-  branch_forward                             branch_fwd_unit                  35               49.210
-  datapath                                   pipelined_cpu_datapath         4179            11730.334
-    datapath/ALU_ALU_GEN[0].slice_i_bitAdder full_adder_95_944                 1                4.256
-    datapath/ALU_ALU_GEN[0].slice_i_resultMux mux_4x1_N1                        3                6.118
+  branch_forward                             branch_fwd_unit                  35               48.678
+  datapath                                   pipelined_cpu_datapath         4191            11741.506
+    datapath/ALU_ALU_GEN[0].slice_i_bitAdder full_adder_95_944                 5                6.650
+    datapath/ALU_ALU_GEN[0].slice_i_resultMux mux_4x1_N1                        3                5.586
     datapath/ALU_ALU_GEN[10].slice_i_bitAdder full_adder_95_955                 5                6.650
     datapath/ALU_ALU_GEN[10].slice_i_resultMux mux_4x1_N1_31_466                 4                4.522
-    datapath/ALU_ALU_GEN[11].slice_i_bitAdder full_adder_95_956                 5                6.650
+    datapath/ALU_ALU_GEN[11].slice_i_bitAdder full_adder_95_956                 5                7.182
     datapath/ALU_ALU_GEN[11].slice_i_resultMux mux_4x1_N1_31_467                 4                4.522
-    datapath/ALU_ALU_GEN[12].slice_i_bitAdder full_adder_95_957                 5                6.650
+    datapath/ALU_ALU_GEN[12].slice_i_bitAdder full_adder_95_957                 1                4.256
     datapath/ALU_ALU_GEN[12].slice_i_resultMux mux_4x1_N1_31_468                 4                4.522
     datapath/ALU_ALU_GEN[13].slice_i_bitAdder full_adder_95_958                 5                6.650
     datapath/ALU_ALU_GEN[13].slice_i_resultMux mux_4x1_N1_31_469                 4                4.522
-    datapath/ALU_ALU_GEN[14].slice_i_bitAdder full_adder_95_959                 1                4.256
+    datapath/ALU_ALU_GEN[14].slice_i_bitAdder full_adder_95_959                 5                6.650
     datapath/ALU_ALU_GEN[14].slice_i_resultMux mux_4x1_N1_31_470                 4                4.522
     datapath/ALU_ALU_GEN[15].slice_i_bitAdder full_adder_95_960                 5                6.650
     datapath/ALU_ALU_GEN[15].slice_i_resultMux mux_4x1_N1_31_471                 4                4.522
-    datapath/ALU_ALU_GEN[16].slice_i_bitAdder full_adder_95_961                 1                4.256
+    datapath/ALU_ALU_GEN[16].slice_i_bitAdder full_adder_95_961                 5                6.650
     datapath/ALU_ALU_GEN[16].slice_i_resultMux mux_4x1_N1_31_472                 4                4.522
     datapath/ALU_ALU_GEN[17].slice_i_bitAdder full_adder_95_962                 1                4.256
     datapath/ALU_ALU_GEN[17].slice_i_resultMux mux_4x1_N1_31_473                 4                4.522
     datapath/ALU_ALU_GEN[18].slice_i_bitAdder full_adder_95_963                 1                4.256
     datapath/ALU_ALU_GEN[18].slice_i_resultMux mux_4x1_N1_31_474                 4                4.522
-    datapath/ALU_ALU_GEN[19].slice_i_bitAdder full_adder_95_964                 1                4.256
+    datapath/ALU_ALU_GEN[19].slice_i_bitAdder full_adder_95_964                 5                6.650
     datapath/ALU_ALU_GEN[19].slice_i_resultMux mux_4x1_N1_31_475                 4                4.522
     datapath/ALU_ALU_GEN[1].slice_i_bitAdder full_adder_95_946                 5                6.650
     datapath/ALU_ALU_GEN[1].slice_i_resultMux mux_4x1_N1_31_457                 4                4.522
-    datapath/ALU_ALU_GEN[20].slice_i_bitAdder full_adder_95_965                 1                4.256
+    datapath/ALU_ALU_GEN[20].slice_i_bitAdder full_adder_95_965                 5                7.182
     datapath/ALU_ALU_GEN[20].slice_i_resultMux mux_4x1_N1_31_476                 4                4.522
-    datapath/ALU_ALU_GEN[21].slice_i_bitAdder full_adder_95_966                 1                4.256
+    datapath/ALU_ALU_GEN[21].slice_i_bitAdder full_adder_95_966                 5                6.650
     datapath/ALU_ALU_GEN[21].slice_i_resultMux mux_4x1_N1_31_477                 4                4.522
     datapath/ALU_ALU_GEN[22].slice_i_bitAdder full_adder_95_967                 1                4.256
     datapath/ALU_ALU_GEN[22].slice_i_resultMux mux_4x1_N1_31_478                 4                4.522
@@ -48,11 +48,11 @@ pipelined_cpu_core                                                          4321
     datapath/ALU_ALU_GEN[28].slice_i_resultMux mux_4x1_N1_31_484                 4                4.522
     datapath/ALU_ALU_GEN[29].slice_i_bitAdder full_adder_95_974                 1                4.256
     datapath/ALU_ALU_GEN[29].slice_i_resultMux mux_4x1_N1_31_485                 4                4.522
-    datapath/ALU_ALU_GEN[2].slice_i_bitAdder full_adder_95_947                 1                4.256
+    datapath/ALU_ALU_GEN[2].slice_i_bitAdder full_adder_95_947                 5                6.650
     datapath/ALU_ALU_GEN[2].slice_i_resultMux mux_4x1_N1_31_458                 4                4.522
     datapath/ALU_ALU_GEN[30].slice_i_bitAdder full_adder_95_975                 1                4.256
     datapath/ALU_ALU_GEN[30].slice_i_resultMux mux_4x1_N1_31                     4                4.522
-    datapath/ALU_ALU_GEN[3].slice_i_bitAdder full_adder_95_948                 5                6.650
+    datapath/ALU_ALU_GEN[3].slice_i_bitAdder full_adder_95_948                 5                7.182
     datapath/ALU_ALU_GEN[3].slice_i_resultMux mux_4x1_N1_31_459                 4                4.522
     datapath/ALU_ALU_GEN[4].slice_i_bitAdder full_adder_95_949                 5                6.650
     datapath/ALU_ALU_GEN[4].slice_i_resultMux mux_4x1_N1_31_460                 4                4.522
@@ -62,14 +62,14 @@ pipelined_cpu_core                                                          4321
     datapath/ALU_ALU_GEN[6].slice_i_resultMux mux_4x1_N1_31_462                 4                4.522
     datapath/ALU_ALU_GEN[7].slice_i_bitAdder full_adder_95_952                 5                6.650
     datapath/ALU_ALU_GEN[7].slice_i_resultMux mux_4x1_N1_31_463                 4                4.522
-    datapath/ALU_ALU_GEN[8].slice_i_bitAdder full_adder_95_953                 1                4.256
+    datapath/ALU_ALU_GEN[8].slice_i_bitAdder full_adder_95_953                 5                6.650
     datapath/ALU_ALU_GEN[8].slice_i_resultMux mux_4x1_N1_31_464                 4                4.522
     datapath/ALU_ALU_GEN[9].slice_i_bitAdder full_adder_95_954                 5                6.650
     datapath/ALU_ALU_GEN[9].slice_i_resultMux mux_4x1_N1_31_465                 4                4.522
     datapath/ALU_msb_bitAdder                full_adder_95_945                 1                4.256
     datapath/ALU_msb_resultMux               mux_4x1_N1_1                      4                4.522
     datapath/branch_or_inc_4                 mux_2x1_N32                      31               57.722
-    datapath/immediate_generation            imm_gen                          84               73.682
+    datapath/immediate_generation            imm_gen                          86               74.480
     datapath/pc_plus_4                       ripple_carry_adder_N32           29               76.076
       datapath/pc_plus_4/FA_GEN[10].fa_i     full_adder_31_923                 1                2.660
       datapath/pc_plus_4/FA_GEN[11].fa_i     full_adder_31_924                 1                2.660
