@@ -6,6 +6,8 @@
 #   ./run.sh --period 2.5 --note "tighten"   full flow at 2.5 ns
 #   ./run.sh --name baseline --note "..."    name the run yourself
 #   ./run.sh --name baseline --from cts      resume an existing run at CTS
+#   ./run.sh --timing typ                    single typical corner, runs 00-03
+#   ./run.sh lec <run>                       formal equivalence, RTL vs netlist
 #   ./run.sh gds                             fetch the Nangate45 stream file
 #   ./run.sh table                           rebuild results/QOR.md
 #
@@ -32,13 +34,15 @@ NAME=""
 FROM="syn"
 NOTE=""
 DO_QOR=1
+TIMING=mmmc
+SYN_CORNER_ARG=""
 
 # Stage order, including synthesis. Anything after 'syn' is an Innovus stage
 # and is handed to innovus.tcl as START_STAGE.
 STAGES="syn floorplan power place cts route report"
 
 usage() {
-    sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -106,6 +110,73 @@ collect() {
     python3 "$ROOT/scripts/qor.py" collect "$ROOT/runs/$NAME" --note "$NOTE" --root "$ROOT"
 }
 
+# Formal equivalence: does the gate netlist still compute what the RTL says?
+#
+# Synthesis is a program that rewrites your design, and timing reports say
+# nothing about whether it rewrote it correctly. Every real flow runs this
+# after synthesis and again after any ECO. It is the cheapest check in the
+# whole flow and it was the largest thing missing from this one.
+#
+# The dofile is written into the run directory rather than kept as a template,
+# because it carries absolute paths and a stale one that silently compares the
+# wrong netlist is worse than no check at all.
+run_lec() {
+    local name="$1"
+    local rundir="$ROOT/runs/$name"
+    local netlist="$rundir/out/pipelined_cpu_core_netlist.v"
+
+    [ -f "$netlist" ] || { echo "No netlist at $netlist"; exit 1; }
+    command -v lec >/dev/null 2>&1 || {
+        echo "MISSING: lec is not on your PATH."
+        echo "         try: export PATH=/apps/cadencedigital/r23/bin:\$PATH"
+        exit 1
+    }
+
+    # Expand the RTL list HERE. A heredoc does not glob, so writing rtl/*.v
+    # into the dofile would leave a literal wildcard and depend on Conformal
+    # expanding it, which is not a promise worth resting the check on.
+    local rtl_files
+    rtl_files=$(ls "$ROOT"/rtl/*.v | tr '
+' ' ')
+
+    cat > "$rundir/lec.do" <<EOF
+// Conformal LEC: RTL (golden) against the synthesised netlist (revised).
+set log file lec.log -replace
+
+// A cell with no functional model would silently compare as equivalent,
+// which is the one outcome that must never happen quietly.
+set undefined cell black_box
+
+read library -liberty $NG45/lib/NangateOpenCellLibrary_typical.lib -revised
+
+read design $rtl_files -verilog -golden -sensitive -continuousassignment bidirectional
+read design $netlist -verilog -revised -sensitive -continuousassignment bidirectional
+
+set system mode lec
+
+add compared points -all
+compare
+
+// Three reports, and the second one is the one people forget. A clean
+// non-equivalent count means nothing if most points were never mapped.
+report compare data      > $rundir/reports/60_lec_compare.rpt
+report unmapped points   > $rundir/reports/61_lec_unmapped.rpt
+report verification      > $rundir/reports/62_lec_verification.rpt
+
+exit -force
+EOF
+
+    echo "=== FORMAL EQUIVALENCE (Conformal LEC) ========================="
+    mkdir -p "$rundir/reports"
+    (cd "$rundir" && lec -nogui -dofile lec.do)
+    echo
+    echo "--- verification result ---"
+    cat "$rundir/reports/62_lec_verification.rpt" 2>/dev/null || echo "(no report written)"
+    echo
+    echo "Non-equivalent must be 0 AND unmapped must be understood."
+    echo "Reports: runs/$name/reports/6*_lec_*.rpt"
+}
+
 get_gds() {
     echo "=== fetching Nangate45 stream file =============================="
     mkdir -p "$HOME/nangate45_gds"
@@ -120,6 +191,8 @@ get_gds() {
 case "${1:-}" in
     gds)   get_gds; exit 0 ;;
     table) python3 "$ROOT/scripts/qor.py" table --root "$ROOT"; exit 0 ;;
+    lec)   [ -n "${2:-}" ] || { echo "usage: ./run.sh lec <run-name>"; exit 1; }
+           run_lec "$2"; exit 0 ;;
     -h|--help) usage 0 ;;
 esac
 
@@ -129,10 +202,27 @@ while [ $# -gt 0 ]; do
         --name)   NAME="$2";   shift 2 ;;
         --from)   FROM="$2";   shift 2 ;;
         --note)   NOTE="$2";   shift 2 ;;
+        --timing) TIMING="$2"; shift 2 ;;
+        --syn-corner) SYN_CORNER_ARG="$2"; shift 2 ;;
         --no-qor) DO_QOR=0;    shift ;;
         *) echo "unknown option: $1"; echo; usage 1 ;;
     esac
 done
+
+case "$TIMING" in
+    mmmc|typ) ;;
+    *) echo "--timing must be mmmc or typ"; exit 1 ;;
+esac
+
+# The two corner knobs are separate on purpose, because they answer different
+# questions and changing both at once answers neither. --timing alone, on a
+# netlist that already exists, measures what the corner costs. Adding
+# --syn-corner measures what building for the corner wins back.
+[ -n "$SYN_CORNER_ARG" ] || {
+    if [ "$TIMING" = "typ" ]; then SYN_CORNER_ARG=typical; else SYN_CORNER_ARG=slow; fi
+}
+export TIMING_MODE="$TIMING"
+export SYN_CORNER="$SYN_CORNER_ARG"
 
 [ "$(stage_index "$FROM")" -ge 0 ] || {
     echo "--from must be one of: $STAGES"; exit 1; }

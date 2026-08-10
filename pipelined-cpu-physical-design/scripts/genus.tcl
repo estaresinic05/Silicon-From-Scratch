@@ -40,8 +40,43 @@ file mkdir $RPT
 #--------------------------------------------------------------------------
 # Libraries
 #--------------------------------------------------------------------------
+# SYNTHESISE AT THE CORNER YOU WILL BE JUDGED AT.
+#
+# Genus optimises against whatever library it is given and then spends what is
+# left over on area, so a netlist built at typical has no reason to be fast
+# enough at slow. Handing it the slow library is not a margin trick, it is the
+# only way the netlist and the signoff view agree about what the cells cost.
+#
+# SYN_CORNER lets run.sh pick, which is what makes the corner a controlled
+# variable rather than a rewrite. Setting it to typical reproduces runs 00
+# through 03 exactly.
+if {[info exists env(SYN_CORNER)]} {
+    set SYN_CORNER $env(SYN_CORNER)
+} else {
+    set SYN_CORNER slow
+}
+
+switch -- $SYN_CORNER {
+    slow    {set SYN_LIB NangateOpenCellLibrary_slow.lib}
+    fast    {set SYN_LIB NangateOpenCellLibrary_fast.lib}
+    typical {set SYN_LIB NangateOpenCellLibrary_typical.lib}
+    default {
+        puts "### SYN_CORNER '$SYN_CORNER' is not slow, fast or typical."
+        exit 1
+    }
+}
+
+if {![file exists $NG45/lib/$SYN_LIB]} {
+    puts "### missing library: $NG45/lib/$SYN_LIB"
+    puts "### slow and fast are not in the stock MacroPlacement enablement."
+    puts "### They come from The-OpenROAD-Project/OpenROAD test/Nangate45."
+    exit 1
+}
+
+puts "### synthesising against $SYN_LIB"
+
 set_db init_lib_search_path $NG45/lib
-set_db library [list $NG45/lib/NangateOpenCellLibrary_typical.lib]
+set_db library [list $NG45/lib/$SYN_LIB]
 
 # The LEF is not needed for logic synthesis, but giving it to Genus lets it
 # use real cell dimensions when it estimates area and wire load.

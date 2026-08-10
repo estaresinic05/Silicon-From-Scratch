@@ -105,31 +105,61 @@ if {[run_from floorplan]} {
     set init_pwr_net          VDD
     set init_gnd_net          VSS
 
-    # ONE CORNER, AND IT IS THE TYPICAL ONE. Say so, because the difference
-    # matters and the names used to hide it: this block called its library
-    # set WC_LIB and its view WC_VIEW, which read as "worst case" while
-    # pointing at NangateOpenCellLibrary_typical.lib.
+    # MULTI-MODE MULTI-CORNER.
     #
-    # Industry signs setup off on a SLOW corner, slow process with low voltage
-    # and high temperature, and hold on a FAST one, across several modes at
-    # once. A block that closes at typical routinely fails by tens of percent
-    # at slow, so every number this flow produces is optimistic by an amount
-    # nothing here can measure.
+    # Setup is signed off on the SLOW corner and hold on the FAST one, which
+    # is the whole point: a late path is worst when the silicon is slow, cold
+    # supply and hot, and an early path is worst when it is fast. Checking
+    # both against typical, as this flow did through run 03, asks neither
+    # question and answers a third nobody cares about.
     #
-    # This is not a shortcut that can be taken back: the Nangate45 enablement
-    # ships _typical.lib and nothing else, so the corners do not exist to be
-    # loaded. Fixing it properly means sourcing slow and fast Liberty for this
-    # library first.
+    #   slow   SlowSlow  0.95 V  125 C     setup
+    #   typ    TypTyp    1.10 V   25 C     neither, kept for comparison runs
+    #   fast   FastFast  1.25 V    0 C     hold
     #
-    # Cmax with the QRC techfile does mean extraction is real rather than a
-    # default table, which is the one part of this that is signoff grade.
-    create_library_set   -name TYP_LIB -timing [list $NG45/lib/NangateOpenCellLibrary_typical.lib]
-    create_rc_corner     -name Cmax -qx_tech_file $NG45/qrc/NG45.tch -T 25
-    create_delay_corner  -name TYP -library_set TYP_LIB -rc_corner Cmax
-    create_constraint_mode -name CON -sdc_files [list out/${DESIGN}.sdc]
-    create_analysis_view  -name TYP_VIEW -constraint_mode CON -delay_corner TYP
+    # The RC corner moves with the library. Cmax, worst-case parasitics, pairs
+    # with slow for setup; Cmin pairs with fast for hold. Pairing a fast
+    # library with pessimistic wires would invent margin that is not there.
+    #
+    # TIMING_MODE=typ restores the single typical view, which is what runs 00
+    # through 03 were built with and the only way to reproduce them.
+    if {[info exists env(TIMING_MODE)]} {
+        set TIMING_MODE $env(TIMING_MODE)
+    } else {
+        set TIMING_MODE mmmc
+    }
 
-    init_design -setup {TYP_VIEW} -hold {TYP_VIEW}
+    create_constraint_mode -name CON -sdc_files [list out/${DESIGN}.sdc]
+    create_rc_corner -name Cmax -qx_tech_file $NG45/qrc/NG45.tch -T 125
+    create_rc_corner -name Cmin -qx_tech_file $NG45/qrc/NG45.tch -T 0
+
+    if {$TIMING_MODE eq "typ"} {
+        create_library_set  -name TYP_LIB -timing [list $NG45/lib/NangateOpenCellLibrary_typical.lib]
+        create_delay_corner -name TYP -library_set TYP_LIB -rc_corner Cmax
+        create_analysis_view -name WC_VIEW -constraint_mode CON -delay_corner TYP
+        create_analysis_view -name BC_VIEW -constraint_mode CON -delay_corner TYP
+        puts "### TIMING_MODE=typ: single typical corner, runs 00-03 behaviour"
+    } else {
+        foreach {set_name lib} {
+            SLOW_LIB NangateOpenCellLibrary_slow.lib
+            FAST_LIB NangateOpenCellLibrary_fast.lib
+        } {
+            if {![file exists $NG45/lib/$lib]} {
+                puts "### missing library: $NG45/lib/$lib"
+                puts "### slow and fast come from The-OpenROAD-Project/OpenROAD"
+                puts "### test/Nangate45. Re-run with TIMING_MODE=typ to skip MMMC."
+                exit 1
+            }
+            create_library_set -name $set_name -timing [list $NG45/lib/$lib]
+        }
+        create_delay_corner -name WC -library_set SLOW_LIB -rc_corner Cmax
+        create_delay_corner -name BC -library_set FAST_LIB -rc_corner Cmin
+        create_analysis_view -name WC_VIEW -constraint_mode CON -delay_corner WC
+        create_analysis_view -name BC_VIEW -constraint_mode CON -delay_corner BC
+        puts "### TIMING_MODE=mmmc: setup on slow/Cmax, hold on fast/Cmin"
+    }
+
+    init_design -setup {WC_VIEW} -hold {BC_VIEW}
 
 } else {
     set RESTORE $RESTORE_FROM($START)
