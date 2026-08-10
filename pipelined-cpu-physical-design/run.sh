@@ -373,48 +373,144 @@ run_gls() {
     local rundir="$ROOT/runs/$name"
     local cells="$ROOT/sim/cells/NangateOpenCellLibrary.v"
     local netlist="$rundir/out/${DESIGN}_routed.v"
-    local defines="-DGATE_SIM -DTETRAMAX"
-    local extra=""
 
-    command -v iverilog >/dev/null 2>&1 || { echo "MISSING: iverilog"; exit 1; }
     [ -f "$cells" ] || { echo "MISSING: $cells"; echo "         run: ./run.sh cells"; exit 1; }
 
     if [ ! -f "$netlist" ]; then
         # The pre-layout netlist is a fallback and it is NOT the layout. It has
         # no clock tree and none of the post-route optimisation, so it answers
-        # "does synthesis work", not "does the thing we built work".
+        # "does synthesis work", not "does the thing we built work". There is
+        # also no SDF for it, so it can only ever be a zero-delay run.
         netlist="$rundir/out/${DESIGN}_netlist.v"
         [ -f "$netlist" ] || { echo "No netlist in $rundir/out."; exit 1; }
         echo "NOTE: no routed netlist in this run, falling back to the Genus one."
-        echo "      Re-run '--from report' to write ${DESIGN}_routed.v."
+        echo "      Re-run '--from report' to write ${DESIGN}_routed.v and the SDFs."
     fi
 
-    # The clock the run was built at, in ps, so a timing-annotated simulation
-    # is exercised at the period its delays were extracted for.
+    # The clock the run was built at, in ps. A timing-annotated simulation has
+    # to be exercised at the period its delays were extracted for, or the
+    # answer is about a clock the design was never constrained to.
     local period_ps=10000
     if [ -f "$rundir/RUN.env" ]; then
         period_ps=$(awk -F= '/CLK_PERIOD/{printf "%d", $2 * 1000}' "$rundir/RUN.env")
     fi
+    # Unless the caller overrides it, which is how you find the period that
+    # actually works rather than the one that was asked for.
+    case " $* " in *" +period_ps="*) period_ps="" ;; esac
 
+    local sdf=""
     if [ "$corner" != "zero" ]; then
-        local sdf="$rundir/out/${DESIGN}_${corner}.sdf"
-        [ -f "$sdf" ] || { echo "No SDF at $sdf"; echo "         re-run '--from report' to write it."; exit 1; }
-        defines="$defines -DSDF_FILE=\"$sdf\""
-        extra="-gspecify"
-        echo "NOTE: iverilog honours SDF path delays but enforces timing checks"
-        echo "      only partially. Xcelium is the tool for a real timing check."
+        sdf="$rundir/out/${DESIGN}_${corner}.sdf"
+        [ -f "$sdf" ] || {
+            echo "No SDF at $sdf"
+            echo "         re-run '--from report' to write it."
+            exit 1
+        }
     fi
 
     # Regenerated from THIS netlist every time, so the forced register names
     # can never be stale relative to the netlist being simulated.
     "$PY" "$ROOT/scripts/mk_rf_init.py" "$netlist" -o "$ROOT/sim/rf_init_gates.vh" || exit 1
 
+    local plus=""
+    [ -n "$period_ps" ] && plus="+period_ps=$period_ps"
+
     echo "=== GATE-LEVEL simulation: $name, corner '$corner' =============="
     echo "    netlist : $netlist"
-    echo "    period  : $period_ps ps"
-    eval iverilog -g2012 $extra $defines -o "$ROOT/sim/gate.vvp" \
-        "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$netlist" "$cells" || exit 1
-    (cd "$ROOT" && vvp sim/gate.vvp +period_ps=$period_ps "$@")
+    [ -n "$sdf" ] && echo "    sdf     : $sdf"
+    [ -n "$period_ps" ] && echo "    period  : $period_ps ps"
+
+    #-----------------------------------------------------------------------
+    # XCELIUM IS THE ONE THAT ENFORCES TIMING CHECKS.
+    #
+    # The Nangate models carry $setuphold, $width, $recovery and $hold, and
+    # each one drives a NOTIFIER into the flop's UDP. When a check fires the
+    # UDP puts X on the output, the X flows into the writeback trace, and this
+    # testbench fails. THAT is the full check: routing, extraction and timing
+    # analysis all reduced to whether the program still computes.
+    #
+    # iverilog honours SDF path delays with -gspecify but does not enforce the
+    # checks, so it can only ever say the delays did not change the answer. It
+    # is kept for the zero-delay run, which is a different and cheaper
+    # question.
+    #
+    # Three xrun options are load bearing:
+    #   -timescale 1ps/1ps  the netlist and the cell models declare none, and
+    #                       Xcelium refuses to elaborate a mixed design where
+    #                       some modules have a timescale and others do not.
+    #   -access +rwc        rf_init_gates.vh forces internal nets. Without
+    #                       write access those forces are silently refused and
+    #                       the register file stays X.
+    #   -negdelay           SDF may contain negative delays at the fast corner;
+    #                       without this they are clamped to zero and the hold
+    #                       check is quietly optimistic.
+    #-----------------------------------------------------------------------
+    local log="$ROOT/sim/gls_${name}_${corner}.log"
+    mkdir -p "$ROOT/sim"
+
+    if [ -n "$sdf" ] && command -v xrun >/dev/null 2>&1; then
+        echo "    simulator: xrun, timing checks ENFORCED"
+        xrun -timescale 1ps/1ps -access +rwc -negdelay \
+             -define GATE_SIM -define TETRAMAX -define "SDF_FILE=\"$sdf\"" \
+             -l "$log" \
+             "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$netlist" "$cells" \
+             $plus "$@"
+        summarise_violations "$log"
+        return
+    fi
+
+    if [ -n "$sdf" ]; then
+        echo "    simulator: iverilog"
+        echo "    WARNING: xrun is not on PATH, so TIMING CHECKS ARE NOT ENFORCED."
+        echo "             SDF path delays are applied, but a setup or hold"
+        echo "             violation will pass silently. For the real check run"
+        echo "             this on nanoHUB: startXcelium, then rerun."
+    fi
+
+    command -v iverilog >/dev/null 2>&1 || { echo "MISSING: iverilog and xrun"; exit 1; }
+    # NOT eval, and not a defines string. SDF_FILE has to reach the compiler
+    # with its quotes intact so that `$sdf_annotate(`SDF_FILE, ...)` expands to
+    # a string literal. Collecting the flags in a variable and eval-ing it lets
+    # the shell eat the quotes, and the error then lands on a testbench line
+    # rather than anywhere near the quoting that caused it.
+    if [ -n "$sdf" ]; then
+        iverilog -g2012 -gspecify -DGATE_SIM -DTETRAMAX -DSDF_FILE="\"$sdf\"" \
+            -o "$ROOT/sim/gate.vvp" \
+            "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$netlist" "$cells" || exit 1
+    else
+        iverilog -g2012 -DGATE_SIM -DTETRAMAX \
+            -o "$ROOT/sim/gate.vvp" \
+            "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$netlist" "$cells" || exit 1
+    fi
+    (cd "$ROOT" && vvp sim/gate.vvp $plus "$@" 2>&1 | tee "$log")
+}
+
+# Count what the simulator said about timing, by its own message codes.
+#
+# A functional pass with violations logged is NOT a pass: it means the program
+# did not happen to exercise the path that failed. 34 instructions do not cover
+# 3,497 timing endpoints, which is exactly why STA is signoff and simulation is
+# not. Both numbers get printed so neither can be read alone.
+summarise_violations() {
+    local log="$1"
+    [ -f "$log" ] || return 0
+    local su hl wd rc
+    su=$(grep -c "TCHKSU"  "$log" 2>/dev/null || true)
+    hl=$(grep -c "TCHKHLD" "$log" 2>/dev/null || true)
+    wd=$(grep -c "TCHKWID" "$log" 2>/dev/null || true)
+    rc=$(grep -cE "TCHKRCV|TCHKREM" "$log" 2>/dev/null || true)
+    echo
+    echo "--- timing check violations reported by the simulator ---"
+    echo "  setup            : $su"
+    echo "  hold             : $hl"
+    echo "  pulse width      : $wd"
+    echo "  recovery/removal : $rc"
+    echo "  full log         : $log"
+    if [ "$su" != "0" ] || [ "$hl" != "0" ]; then
+        echo
+        echo "  A functional PASS above with violations here means the program"
+        echo "  did not exercise the failing path. It is not timing closure."
+    fi
 }
 
 get_gds() {
