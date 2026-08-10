@@ -191,21 +191,23 @@ read design $netlist -verilog -revised -sensitive -continuousassignment bidirect
 
 set system mode lec
 
-// SYNTHESIS MERGED TWO CONTROL SIGNALS THAT ARE ALWAYS EQUAL.
+// SYNTHESIS MERGED TWO CONTROL SIGNALS THAT ARE ALWAYS EQUAL, and no
+// mapping command can express that.
 //
-// pipelined_cpu_control.v assigns IFID_memRead and IFID_memToReg identically
-// in every branch: both 0 by default, both 1 for a load, never assigned
-// anywhere else. They are one signal with two names, so Genus keeps a single
-// flop chain and drives both from it. The netlist has IDEX_memRead_reg and
-// EXMEM_memRead_reg but no memToReg at those stages, which leaves golden's
-// copies unmapped and fails MEMWB_memToReg_reg downstream of them.
+// pipelined_cpu_control.v drives IFID_memRead and IFID_memToReg identically in
+// every branch, and the datapath pipelines both with identical flush, stall
+// and reset behaviour, so they are one signal carried twice. Genus keeps a
+// single chain: the netlist has IDEX_memRead_reg and EXMEM_memRead_reg and no
+// memToReg at those stages.
 //
-// Mapped explicitly rather than with a blanket -seq_merge. A named pair says
-// which optimisation was accepted and can be re-checked when the RTL changes;
-// a global relaxation silently forgives anything of that shape forever.
-add mapped points /datapath/IDEX_memToReg_reg  /datapath/IDEX_memRead_reg
-add mapped points /datapath/EXMEM_memToReg_reg /datapath/EXMEM_memRead_reg
-
+// add mapped points was tried here and rejected with "This is already a mapped
+// point". Conformal maps ONE TO ONE, golden's memRead flops had already
+// claimed the revised ones, and golden simply holds more state than revised
+// does. That is not a mapping problem to be worked around, it is the RTL
+// declaring two registers where the hardware has one.
+//
+// Leaves MEMWB_memToReg_reg non-equivalent and its two feeders unmapped. The
+// fix belongs in the RTL, not here.
 
 add compared points -all
 compare
