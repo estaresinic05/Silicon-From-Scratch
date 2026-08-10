@@ -289,6 +289,24 @@ if {[run_from place]} {
 #     place_opt_design -> clock_opt_design -> route_opt_design
 # Mixing the older ccopt_design in gives IMPCCOPT-2440.
 if {[run_from cts]} {
+    # NAME THE CLOCK CELLS. CCOpt auto-detects them from the libraries, and
+    # under MMMC that auto-detection failed outright:
+    #
+    #   IMPCCOPT-1183  no usable balanced buffers   for power domain auto-default
+    #   IMPCCOPT-1184  no usable balanced inverters for power domain auto-default
+    #   IMPCCOPT-1135  CTS found neither inverters nor buffers. CTS cannot continue.
+    #
+    # The cells were never missing. CLKBUF_X1/X2/X3 and the six INV_X* are in
+    # all three corner libraries, verified cell by cell. What changed is that
+    # two library sets are active instead of one, and the auto-selection stops
+    # finding a set it considers usable across both.
+    #
+    # Naming them is what a production flow does anyway. Auto-detection quietly
+    # choosing the wrong drive strengths is a well known way to get a bad clock
+    # tree, and this failed loudly only because it found nothing at all.
+    set_ccopt_property buffer_cells   {CLKBUF_X1 CLKBUF_X2 CLKBUF_X3}
+    set_ccopt_property inverter_cells {INV_X1 INV_X2 INV_X4 INV_X8 INV_X16 INV_X32}
+
     create_ccopt_clock_tree_spec
     clock_opt_design
 
