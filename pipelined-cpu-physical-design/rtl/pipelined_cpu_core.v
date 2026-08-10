@@ -92,7 +92,6 @@ module pipelined_cpu_core (
   /*----------- control signals, decoded in ID -----------*/
   wire [2:0] IFID_branch;
   wire       IFID_memRead;
-  wire       IFID_memToReg;
   wire [3:0] IFID_operation;
   wire       IFID_memWrite;
   wire       IFID_ALUsrc;
@@ -136,7 +135,6 @@ module pipelined_cpu_core (
       .IFID_funct7_5(IFID_funct7_5),
       .IFID_branch(IFID_branch),
       .IFID_memRead(IFID_memRead),
-      .IFID_memToReg(IFID_memToReg),
       .IFID_operation(IFID_operation),
       .IFID_memWrite(IFID_memWrite),
       .IFID_ALUsrc(IFID_ALUsrc),
@@ -184,7 +182,6 @@ module pipelined_cpu_core (
       .reset(reset),
       .IFID_branch(IFID_branch),
       .IFID_memRead(IFID_memRead),
-      .IFID_memToReg(IFID_memToReg),
       .IFID_operation(IFID_operation),
       .IFID_memWrite(IFID_memWrite),
       .IFID_ALUsrc(IFID_ALUsrc),

@@ -41,7 +41,6 @@
  *   Outputs:
  *     IFID_branch      - 3-bit one-hot beq, bne, or blt
  *     IFID_memRead     - control signal to read data memory
- *     IFID_memToReg    - mux sel signal for load vs arithmetic
  *     IFID_operation   - 4-bit ALU operation control signal
  *     IFID_memWrite    - control signal to write data memory
  *     IFID_ALUsrc      - mux sel signal to send immediate to ALU
@@ -55,7 +54,6 @@ module pipelined_cpu_control (
     input  wire       IFID_funct7_5,
     output reg  [2:0] IFID_branch,
     output reg        IFID_memRead,
-    output reg        IFID_memToReg,
     output reg  [3:0] IFID_operation,
     output reg        IFID_memWrite,
     output reg        IFID_ALUsrc,
@@ -66,7 +64,6 @@ module pipelined_cpu_control (
 
     IFID_branch    = 3'b000;
     IFID_memRead   = 1'b0;
-    IFID_memToReg  = 1'b0;
     IFID_operation = 4'b0010;  // add is the safe idle operation
     IFID_memWrite  = 1'b0;
     IFID_ALUsrc    = 1'b0;
@@ -76,7 +73,6 @@ module pipelined_cpu_control (
 
       7'b0000011: begin        // lw
         IFID_memRead   = 1'b1;
-        IFID_memToReg  = 1'b1;
         IFID_operation = 4'b0010;  // add to form the address
         IFID_ALUsrc    = 1'b1;
         IFID_regWrite  = 1'b1;

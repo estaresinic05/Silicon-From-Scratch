@@ -53,7 +53,6 @@
  *     --------Inputs from Main Control Unit--------
  *     IFID_branch        - 3-bit one-hot branch type
  *     IFID_memRead       - control signal to read data memory
- *     IFID_memToReg      - mux sel signal for load vs arithmetic
  *     IFID_operation     - 4-bit ALU operation
  *     IFID_memWrite      - control signal to write data memory
  *     IFID_ALUsrc        - mux sel signal to send immediate to ALU
@@ -99,7 +98,6 @@ module pipelined_cpu_datapath (
     input  wire       reset,
     input  wire [2:0] IFID_branch,      //one-hot: NO_BRANCH (000), BEQ, BNE, BLT
     input  wire       IFID_memRead,
-    input  wire       IFID_memToReg,
     input  wire [3:0] IFID_operation,
     input  wire       IFID_memWrite,
     input  wire       IFID_ALUsrc,
@@ -167,7 +165,7 @@ module pipelined_cpu_datapath (
   /*---------------- EX stage nets ----------------*/
   reg  [31:0] IDEX_readData1, IDEX_readData2, IDEX_imm;
   reg  [ 3:0] IDEX_operation;
-  reg         IDEX_ALUsrc, IDEX_memWrite, IDEX_memToReg;
+  reg         IDEX_ALUsrc, IDEX_memWrite;
   wire [31:0] IDEX_forwardAOut, IDEX_forwardBOut;
   wire [31:0] IDEX_aluMuxOut;
   wire [31:0] IDEX_aluResult;
@@ -175,7 +173,7 @@ module pipelined_cpu_datapath (
 
   /*--------------- MEM stage nets ----------------*/
   reg  [31:0] EXMEM_aluResult, EXMEM_storeData;
-  reg         EXMEM_memWrite, EXMEM_memToReg;
+  reg         EXMEM_memWrite;
   wire [31:0] EXMEM_wordToLoad;
 
   /*---------------- WB stage nets ----------------*/
@@ -389,7 +387,6 @@ module pipelined_cpu_datapath (
       IDEX_regWrite  <= 1'b0;
       IDEX_memRead   <= 1'b0;
       IDEX_memWrite  <= 1'b0;
-      IDEX_memToReg  <= 1'b0;
       IDEX_ALUsrc    <= 1'b0;
       IDEX_operation <= 4'b0010;
       IDEX_rs1       <= 5'b0;
@@ -402,7 +399,6 @@ module pipelined_cpu_datapath (
       IDEX_regWrite  <= 1'b0;
       IDEX_memRead   <= 1'b0;
       IDEX_memWrite  <= 1'b0;
-      IDEX_memToReg  <= 1'b0;
       IDEX_ALUsrc    <= 1'b0;
       IDEX_operation <= 4'b0010;  // add, matching the control unit's idle op
       // The register NUMBERS have to be zeroed too, not just the control
@@ -425,7 +421,6 @@ module pipelined_cpu_datapath (
       IDEX_ALUsrc    <= IFID_ALUsrc;
       IDEX_memRead   <= IFID_memRead;
       IDEX_memWrite  <= IFID_memWrite;
-      IDEX_memToReg  <= IFID_memToReg;
       IDEX_regWrite  <= IFID_regWrite;
     end
   end
@@ -438,7 +433,6 @@ module pipelined_cpu_datapath (
       EXMEM_regWrite  <= 1'b0;
       EXMEM_memRead   <= 1'b0;
       EXMEM_memWrite  <= 1'b0;
-      EXMEM_memToReg  <= 1'b0;
       EXMEM_rd        <= 5'b0;
       EXMEM_aluResult <= 32'b0;
       EXMEM_storeData <= 32'b0;
@@ -446,7 +440,6 @@ module pipelined_cpu_datapath (
       EXMEM_regWrite  <= 1'b0;
       EXMEM_memRead   <= 1'b0;
       EXMEM_memWrite  <= 1'b0;
-      EXMEM_memToReg  <= 1'b0;
       EXMEM_rd        <= 5'b0;
       EXMEM_aluResult <= 32'b0;
       EXMEM_storeData <= 32'b0;
@@ -460,7 +453,6 @@ module pipelined_cpu_datapath (
       EXMEM_rd        <= IDEX_rd;
       EXMEM_memRead   <= IDEX_memRead;
       EXMEM_memWrite  <= IDEX_memWrite;
-      EXMEM_memToReg  <= IDEX_memToReg;
       EXMEM_regWrite  <= IDEX_regWrite;
     end
   end
@@ -479,7 +471,13 @@ module pipelined_cpu_datapath (
       MEMWB_memData   <= EXMEM_wordToLoad;
       MEMWB_aluResult <= EXMEM_aluResult;
       MEMWB_rd        <= EXMEM_rd;
-      MEMWB_memToReg  <= EXMEM_memToReg;
+      // EXMEM_memRead, not a memToReg of its own. The control unit drove
+      // memRead and memToReg identically in every branch, and this datapath
+      // pipelined both with the same reset, flush and stall behaviour, so two
+      // register chains carried one value. Synthesis proved that and kept one,
+      // which left the RTL declaring state the hardware does not have and
+      // equivalence checking unable to map it. One chain now, tapped here.
+      MEMWB_memToReg  <= EXMEM_memRead;
       MEMWB_regWrite  <= EXMEM_regWrite;
     end
   end
