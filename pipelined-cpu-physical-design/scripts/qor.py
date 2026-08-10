@@ -55,7 +55,7 @@ KEEP += ["41_hold_%s.rpt" % t for t in CORNERS]
 # because those were signed off at typical and the slow column is the penalty
 # they were never judged by.
 FIELDS = [
-    "run", "note", "clk_ns", "date",
+    "run", "note", "clk_ns", "util", "date",
     "wns_place", "wns_cts", "wns_hold_cts", "wns_setup", "wns_hold",
     "n_setup_viol", "n_hold_viol", "tns_setup",
     "cells", "fillers", "flops",
@@ -360,6 +360,22 @@ def parse_flow_qor(run_dir):
     return None
 
 
+def parse_util(run_dir):
+    """
+    The core utilization the run was floorplanned at, out of RUN.env.
+
+    A sweep table that records the clock but not the density cannot say what it
+    swept. Older runs have no CORE_UTIL line and read back as the 0.70 that was
+    hardcoded when they were built, which is what they actually used.
+    """
+    text = _read(Path(run_dir) / "RUN.env")
+    if text:
+        m = re.search(r"CORE_UTIL=([\d.]+)", text)
+        if m:
+            return float(m.group(1))
+    return 0.70
+
+
 def parse_clock(run_dir):
     """
     Clock period out of the SDC Genus wrote, which is the one Innovus used.
@@ -450,6 +466,7 @@ def parse_run(run_dir):
 
     row["wns_place_start"] = parse_flow_qor(run_dir)
     row["clk_ns"] = parse_clock(run_dir)
+    row["util"] = parse_util(run_dir)
     row["date"] = _gen_date(rpt / "44_summary.rpt") or ""
 
     return {k: ("" if v is None else v) for k, v in row.items()}
@@ -596,15 +613,16 @@ def write_markdown(rows, md_path):
     # 50 setup and exactly 50 hold, which was -max_paths 50 and not a count.
     # The true figure was 362 failing paths and -82.8 ns of TNS.
     head = (
-        "| Run | Clk | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
+        "| Run | Clk | Util | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
     )
     lines = []
     for r in rows:
         lines.append(
-            "| `{run}` | {clk} | {ws} | {ts} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
+            "| `{run}` | {clk} | {util} | {ws} | {ts} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
                 run=r.get("run", "?"),
                 clk=_fmt(r.get("clk_ns"), 2),
+                util=_fmt(r.get("util"), 2),
                 ws=_fmt(r.get("wns_setup")),
                 ts=_fmt(r.get("tns_setup"), 1),
                 ns=_viol(r.get("n_setup_viol")),

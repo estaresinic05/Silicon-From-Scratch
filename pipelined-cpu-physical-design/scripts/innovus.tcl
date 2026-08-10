@@ -79,9 +79,28 @@ array set RESTORE_FROM {
 
 # Core utilization for the first floorplan. 0.70 is a normal starting point:
 # dense enough to be a real problem, loose enough to route.
-set UTIL   0.70
+# CORE UTILIZATION IS THE PHYSICAL LEVER, so it is an argument rather than an
+# edit. It trades area against routability and timing: pack tighter and the
+# cells are closer, which shortens wires, until the router runs out of room and
+# starts detouring, at which point everything gets worse at once. Finding that
+# bend is what a utilization sweep is for, and it cannot be found by reasoning.
+if {[info exists env(CORE_UTIL)]} {
+    set UTIL $env(CORE_UTIL)
+} else {
+    set UTIL 0.70
+}
 set ASPECT 1.0
 set MARGIN 10
+
+# Per-run artifacts that a sweep does not need: three SDFs at about 6 MB each
+# and a 9.6 MB GDS, plus the minutes they take to write. Off unless asked for.
+# A sweep is eight or more runs, so this is the difference between a table in
+# the morning and a full disk.
+if {[info exists env(WRITE_ARTIFACTS)]} {
+    set WRITE_ARTIFACTS $env(WRITE_ARTIFACTS)
+} else {
+    set WRITE_ARTIFACTS 0
+}
 
 file mkdir enc
 file mkdir reports
@@ -188,6 +207,7 @@ setDesignMode -topRoutingLayer 10 -bottomRoutingLayer 2
 # for the power ring and pins.
 #--------------------------------------------------------------------------
 if {[run_from floorplan]} {
+    puts "### floorplanning at utilization $UTIL"
     floorPlan -site $SITE -r $ASPECT $UTIL $MARGIN $MARGIN $MARGIN $MARGIN
 
     # Spread the pins along the boundary instead of leaving them stacked.
@@ -383,23 +403,38 @@ foreach {label cmd} [list \
     "area"         {report_area  > reports/42_final_area.rpt} \
     "power"        {report_power > reports/43_final_power.rpt} \
     "summary"      {summaryReport -noHtml -outfile reports/44_summary.rpt} \
-    "def"          {defOut -netlist -floorplan -routing ${DESIGN}_final.def} \
-    "netlist"      {saveNetlist out/${DESIGN}_routed.v -excludeLeafCell} \
 ] {
     if {[catch {eval $cmd} msg]} {
         puts "### report '$label' failed, continuing: $msg"
     }
 }
 
+# The heavy outputs: a 7.8 MB DEF and a 1 MB post-route netlist per run.
+#
+# Neither is read by a timing sweep. Every number a sweep produces comes out of
+# reports/, which is a few kilobytes of text and is what gets committed. These
+# are for looking at the layout and for gate-level simulation, so they are
+# opt-in with --artifacts.
+if {$WRITE_ARTIFACTS} {
+    foreach {label cmd} [list \
+        "def"     {defOut -netlist -floorplan -routing ${DESIGN}_final.def} \
+        "netlist" {saveNetlist out/${DESIGN}_routed.v -excludeLeafCell} \
+    ] {
+        if {[catch {eval $cmd} msg]} {
+            puts "### artifact '$label' failed, continuing: $msg"
+        }
+    }
+}
+
 # GDSII, only if the Nangate45 stream file has been fetched. run.sh can
 # download it; without it the DEF above is still a complete layout.
 set GDS_IN $env(HOME)/nangate45_gds/NangateOpenCellLibrary.gds
-if {[file exists $GDS_IN]} {
+if {$WRITE_ARTIFACTS && [file exists $GDS_IN]} {
     streamOut ${DESIGN}.gds \
         -libName ${DESIGN} -merge [list $GDS_IN] -units 1000 -mode ALL
     puts "### GDSII written: ${DESIGN}.gds"
 } else {
-    puts "### GDSII skipped: no stream file at $GDS_IN"
+    puts "### GDSII skipped. WRITE_ARTIFACTS=$WRITE_ARTIFACTS"
 }
 
 #--------------------------------------------------------------------------
@@ -612,8 +647,14 @@ if {$DROPPED > 0} {
         # the program but believes every gate is instant.
         #
         # A file per corner, because a delay is meaningless without one.
-        corner_step sdf_$tag \
-            "write_sdf -view $view out/${DESIGN}_${tag}.sdf"
+        #
+        # OFF BY DEFAULT. Three files at about 6 MB each, and the minutes to
+        # write them, on every run. A sweep is eight or more runs and does not
+        # want any of it: fmax and the utilization curve come from the reports.
+        if {$WRITE_ARTIFACTS} {
+            corner_step sdf_$tag \
+                "write_sdf -view $view out/${DESIGN}_${tag}.sdf"
+        }
     }
 
     # -expandedViews adds a block per active view to the summary, under the

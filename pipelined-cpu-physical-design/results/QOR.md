@@ -7,15 +7,15 @@ Slacks are nanoseconds, worst path, post-route unless the column says
 otherwise. A negative setup WNS means the run did not make timing at
 that clock. Frozen reports for every run are in `results/<run>/reports/`.
 
-| Run | Clk | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |
+| Run | Clk | Util | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `06-clk3p9` | 3.90 | -0.066 | -1.3 | 45 | 0.011 | 0 | 8,148 | 82.7% | 93,039 | three-corner re-report |
-| `04-mmmc-analysis` | 2.80 | -0.968 | -82.8 | 362 | -0.155 | 50 | 6,752 | 85.1% | 84,689 | three-corner re-report |
-| `05-mmmc-full` | 2.80 | -1.060 | -89.2 | 541 | -0.083 | 14 | 7,305 | 78.3% | 85,240 | three-corner re-report |
-| `00-baseline` | 3.00 | 0.009 | - | 0 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
-| `01-split-uncertainty` | 3.00 | 0.009 | - | 0 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
-| `02-clk2p8` | 2.80 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
-| `03-ring-fix` | 2.80 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | ring spacing 1.5um, clears the four MetSpc violations |
+| `06-clk3p9` | 3.90 | 0.70 | -0.066 | -1.3 | 45 | 0.011 | 0 | 8,148 | 82.7% | 93,039 | three-corner re-report |
+| `04-mmmc-analysis` | 2.80 | 0.70 | -0.968 | -82.8 | 362 | -0.155 | 50 | 6,752 | 85.1% | 84,689 | three-corner re-report |
+| `05-mmmc-full` | 2.80 | 0.70 | -1.060 | -89.2 | 541 | -0.083 | 14 | 7,305 | 78.3% | 85,240 | three-corner re-report |
+| `00-baseline` | 3.00 | 0.70 | 0.009 | - | 0 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
+| `01-split-uncertainty` | 3.00 | 0.70 | 0.009 | - | 0 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
+| `02-clk2p8` | 2.80 | 0.70 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
+| `03-ring-fix` | 2.80 | 0.70 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | ring spacing 1.5um, clears the four MetSpc violations |
 
 ## By corner
 

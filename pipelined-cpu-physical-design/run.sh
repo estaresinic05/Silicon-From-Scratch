@@ -4,6 +4,8 @@
 #
 #   ./run.sh                                 full flow at the default clock
 #   ./run.sh --period 2.5 --note "tighten"   full flow at 2.5 ns
+#   ./run.sh --period 4.0 --util 0.80        ...at 80% core utilization
+#   ./run.sh --period 4.0 --artifacts        ...also write DEF, netlist, SDF, GDS
 #   ./run.sh --name baseline --note "..."    name the run yourself
 #   ./run.sh --name baseline --from cts      resume an existing run at CTS
 #   ./run.sh --name baseline --from report   re-report a routed run, no re-route
@@ -56,6 +58,8 @@ for _c in python3 python py; do
 done
 
 PERIOD=3.0
+UTIL=0.70
+ARTIFACTS=0
 NAME=""
 FROM="syn"
 NOTE=""
@@ -71,7 +75,7 @@ usage() {
     # The line range is the comment block at the top of this file. It moves
     # whenever that block grows, and nothing catches it but reading the output,
     # so `./run.sh --help` is worth an eye after editing the header.
-    sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -746,6 +750,8 @@ esac
 while [ $# -gt 0 ]; do
     case "$1" in
         --period) PERIOD="$2"; shift 2 ;;
+        --util)   UTIL="$2";   shift 2 ;;
+        --artifacts) ARTIFACTS=1; shift ;;
         --name)   NAME="$2";   shift 2 ;;
         --from)   FROM="$2";   shift 2 ;;
         --note)   NOTE="$2";   shift 2 ;;
@@ -776,9 +782,16 @@ export SYN_CORNER="$SYN_CORNER_ARG"
 
 # Default run name is the clock it was run at, which is the thing that
 # usually differs. clk3p0, clk2p5, and so on.
-[ -n "$NAME" ] || NAME="clk$(echo "$PERIOD" | tr '.' 'p')"
+# Default name is what usually differs. Utilization joins it when it is not
+# the 0.70 default, so a sweep cannot silently overwrite itself.
+if [ -z "$NAME" ]; then
+    NAME="clk$(echo "$PERIOD" | tr '.' 'p')"
+    [ "$UTIL" = "0.70" ] || NAME="${NAME}_u$(echo "$UTIL" | tr -d '0.')"
+fi
 
 export CLK_PERIOD="$PERIOD"
+export CORE_UTIL="$UTIL"
+export WRITE_ARTIFACTS="$ARTIFACTS"
 
 RUNDIR="$ROOT/runs/$NAME"
 
@@ -795,7 +808,9 @@ cd "$RUNDIR"
 # reads the period out of the SDC Genus already wrote and so would be
 # unaffected, the run banner would lie about what you were looking at.
 if [ "$FROM" = "syn" ]; then
-    echo "CLK_PERIOD=$PERIOD" > RUN.env
+    printf 'CLK_PERIOD=%s
+CORE_UTIL=%s
+' "$PERIOD" "$UTIL" > RUN.env
 elif [ -f RUN.env ]; then
     . ./RUN.env
     PERIOD="$CLK_PERIOD"
