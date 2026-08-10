@@ -187,6 +187,17 @@ last value that passed post-route is the real number.
 ./run.sh --period 2.2 --note "sweep step 2"
 ```
 
+`experiments/adder/` measures the ripple carry adder and a carry lookahead
+replacement **on their own**, registered at both ends, at the slow corner. If
+the adder were swapped straight into the CPU and the path did not improve as
+much as hoped, there would be no way to tell whether the adder underdelivered
+or whether something around it had become the new limit. Measuring it alone
+first answers that in advance.
+
+```
+./experiments/adder/run.sh
+```
+
 **Where the sweep has got to: 2.8 ns passes post-route with 2 ps to spare.**
 The worst path launches out of the writeback stage, crosses the forwarding
 comparators into the ALU operand mux, and then spends 2.12 ns of its 2.85 ns
