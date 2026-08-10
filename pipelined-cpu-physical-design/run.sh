@@ -603,12 +603,19 @@ run_gls() {
         # errors and zero timing-check messages, on a netlist that passes
         # perfectly at zero delay.
         #
-        # AND TETRAMAX HAS TO COME OFF for the SDF tier. It suppresses the
-        # ng_xbuf primitives, and in the NTC branch those drive the delayed
-        # reference signals the annotated checks are written against. The port
-        # coercion that made TETRAMAX necessary for iverilog is in the NON-NTC
-        # branch only: there ng_xbuf drives the RN input port, here it drives
-        # the internal RN_d.
+        # TETRAMAX STAYS ON for the SDF tier too. Taking it off was tried and
+        # the design stopped running entirely: zero writes, nothing clocked.
+        #
+        # TETRAMAX suppresses the ng_xbuf X-propagation primitives, and in the
+        # NTC branch those give RN_d a SECOND driver -- buf(RN_d, RN_di) and
+        # ng_xbuf(RN_d, RNx, 1'b1), with RNx buffered back off RN_d. Two
+        # drivers that disagree resolve to X, the flops never leave reset, and
+        # the CPU does nothing at all.
+        #
+        # The x-buffers are an X-pessimism feature, not a correctness one. The
+        # delayed reference signals the annotated checks need -- CK_d, D_d,
+        # RN_di -- come from the $setuphold and $recrem delayed-signal
+        # arguments, which NTC and RECREM provide and TETRAMAX leaves alone.
         #
         # Zero delay keeps TETRAMAX and switches the checks off outright. With
         # no delays, data changes in the same instant as the clock edge and
@@ -616,7 +623,7 @@ run_gls() {
         local sdfdef modedef checkarg
         if [ -n "$sdf" ]; then
             sdfdef="-define SDF_FILE=\"$sdf\""
-            modedef="-define NTC -define RECREM"
+            modedef="-define NTC -define RECREM -define TETRAMAX"
             checkarg=""
             echo "    simulator: xrun, SDF annotated, timing checks ENFORCED"
         else
