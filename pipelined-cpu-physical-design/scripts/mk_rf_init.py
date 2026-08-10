@@ -37,15 +37,32 @@ BS = chr(92)  # a literal backslash, by code point, so no escape can eat it
 # the routed netlist, and would have left one of them at X with no warning at
 # all. Instance names survive both tools unchanged, so they are what is matched,
 # and the drive lands on the flop's scan pins.
-INST = re.compile(re.escape(BS) + r"(registers_RF_reg\[(\d+)\]\[(\d+)\])")
+INST = re.compile(r"([A-Z][A-Z0-9_]*)\s+" + re.escape(BS) +
+                  r"(registers_RF_reg\[(\d+)\]\[(\d+)\])")
 
 
 def find_flops(netlist_text):
-    """Every register-file flop instance, ordered by register then bit."""
+    """[(instance, cell_type)] for every register-file flop, register then bit."""
     found = {}
-    for name, reg, bit in INST.findall(netlist_text):
-        found[(int(reg), int(bit))] = name
+    for cell, name, reg, bit in INST.findall(netlist_text):
+        found[(int(reg), int(bit))] = (name, cell)
     return [found[k] for k in sorted(found)]
+
+
+def resettable(cells_text, cell_types):
+    """
+    True when the register file's flops have a reset pin.
+
+    Once reg_file.v resets RF for real, synthesis maps it to a resettable flop
+    and none of this file is needed: the netlist initialises itself, exactly
+    like the silicon would. Detected rather than assumed, so the generator
+    keeps working for older netlists that predate the change.
+    """
+    for cell in set(cell_types):
+        m = re.search(r"(?ms)^module\s+" + re.escape(cell) + r"\s*\((.*?)\)", cells_text)
+        if not m or not re.search(r"(RN|SN)", m.group(1)):
+            return False
+    return True
 
 
 def find_scope(netlist_text):
@@ -153,7 +170,10 @@ def main():
 
     text, n, scope = build(args.netlist)
     Path(args.out).write_text(text, encoding="utf-8")
-    print("{} register flops under {} -> {}".format(n, scope, args.out))
+    if n == 0:
+        print("register file is resettable in this netlist -> {} (no forcing)".format(args.out))
+    else:
+        print("{} register flops under {} -> {}".format(n, scope, args.out))
 
 
 if __name__ == "__main__":

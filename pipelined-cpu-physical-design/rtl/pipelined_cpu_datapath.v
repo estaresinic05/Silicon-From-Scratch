@@ -229,6 +229,7 @@ module pipelined_cpu_datapath (
       .writeData(MEMWB_dataToWrite),
       .writeEnable(MEMWB_regWrite),
       .clk(clk),
+      .reset(reset),
       .data1(IFID_readData1),
       .data2(IFID_readData2)
   );
