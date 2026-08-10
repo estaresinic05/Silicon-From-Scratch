@@ -41,7 +41,7 @@ KEEP = [
 FIELDS = [
     "run", "note", "clk_ns", "date",
     "wns_place", "wns_cts", "wns_hold_cts", "wns_setup", "wns_hold",
-    "n_setup_viol", "n_hold_viol",
+    "n_setup_viol", "n_hold_viol", "tns_setup",
     "cells", "fillers", "flops",
     "logic_um2", "core_um2", "density_pct",
     "wire_um", "wns_place_start",
@@ -79,6 +79,60 @@ def _count_violated(path, kind):
     if text is None:
         return None
     return len(re.findall(rf"VIOLATED {kind} Check", text))
+
+
+def parse_postroute_summary(path):
+    """
+    WNS, TNS and the violating-path count out of the post-route summary.
+
+    This is the only place a TRUE violation count exists. _count_violated below
+    counts VIOLATED lines in a report_timing output, and that report holds at
+    most -max_paths paths, so the moment a run fails badly the count saturates
+    at the cap and reports the cap as if it were a measurement. Run 04 showed 50
+    setup and 50 hold against a real figure of 362.
+
+    The summary is a fixed-width table, "all" first and then one column per path
+    group:
+
+        |           WNS (ns):| -0.968  | -0.968  |  0.295  |
+        |           TNS (ns):| -82.769 | -82.769 |  0.000  |
+        |    Violating Paths:|   362   |   362   |    0    |
+
+    Only the "all" column is taken. Per-group numbers are worth reading in the
+    file itself and are not worth a column each in a table this wide.
+
+    Two shapes, for the same reason parse_flow_qor above carries two. A LIVE run
+    has it gzipped in timingReports/ exactly as Innovus wrote it. An ARCHIVED
+    run under results/ has it ungzipped to reports/50_postroute_summary.rpt by
+    archive_reports. Looking in only one place is how the first version of this
+    silently returned nothing at all: parse_run passes run_dir/"reports", and
+    archive_reports writes to results/, so the file was never where it looked.
+    """
+    d = {}
+    run_dir = Path(path)
+
+    text = _read(run_dir / "reports" / "50_postroute_summary.rpt")
+
+    if text is None:
+        # A live run: take the setup summary, never the _hold one beside it.
+        for gz in sorted(run_dir.glob("timingReports/*postRoute*.summary.gz")):
+            if "_hold" in gz.name:
+                continue
+            try:
+                with gzip.open(str(gz), "rt", errors="replace") as fh:
+                    text = fh.read()
+            except (OSError, EOFError):
+                text = None
+            break
+
+    if text is None:
+        return d
+    for key, label in (("tns", r"TNS \(ns\):"), ("viol", r"Violating Paths:"),
+                       ("wns", r"WNS \(ns\):")):
+        m = re.search(r"^\|\s*" + label + r"\|\s*(-?[\d.]+)", text, re.M)
+        if m:
+            d[key] = float(m.group(1))
+    return d
 
 
 def _gen_date(path):
@@ -246,8 +300,17 @@ def parse_run(run_dir):
     row["wns_setup"] = _first_slack(rpt / "40_final_setup.rpt")
     row["wns_hold"] = _first_slack(rpt / "41_final_hold.rpt")
 
+    # The capped counts, kept as a fallback for runs archived before the
+    # post-route summary was collected (00-baseline and 01-split-uncertainty).
     row["n_setup_viol"] = _count_violated(rpt / "40_final_setup.rpt", "Setup")
     row["n_hold_viol"] = _count_violated(rpt / "41_final_hold.rpt", "Hold")
+
+    # The real numbers, when the run archived a summary to take them from.
+    summ = parse_postroute_summary(run_dir)
+    if "viol" in summ:
+        row["n_setup_viol"] = int(summ["viol"])
+    if "tns" in summ:
+        row["tns_setup"] = summ["tns"]
 
     row.update({k: v for k, v in parse_summary(rpt / "44_summary.rpt").items()})
 
@@ -323,22 +386,28 @@ def write_markdown(rows, md_path):
     The iteration table. One row per run, newest last, so the trend reads
     top to bottom in the order the work happened.
     """
-    # Setup viol sits beside Setup WNS, because WNS is one number and it hides
-    # the shape. A run can show the same worst slack whether one endpoint is
-    # failing or four hundred are, and those are different problems with
-    # different fixes. n_setup_viol was collected from the first version and
-    # printed to the console, but it never reached the table anyone reads.
+    # Setup TNS and Setup viol sit beside Setup WNS, because WNS is one number
+    # and it hides the shape. A run can show the same worst slack whether one
+    # endpoint fails or four hundred do, and those are different problems.
+    #
+    # Both come from the post-route summary rather than from counting VIOLATED
+    # lines in 40_final_setup.rpt. That report holds at most -max_paths paths,
+    # so a badly failing run saturates the count at the cap and the table then
+    # prints the cap as though it were a measurement. Run 04 reported exactly
+    # 50 setup and exactly 50 hold, which was -max_paths 50 and not a count.
+    # The true figure was 362 failing paths and -82.8 ns of TNS.
     head = (
-        "| Run | Clk | Setup WNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
+        "| Run | Clk | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
     )
     lines = []
     for r in rows:
         lines.append(
-            "| `{run}` | {clk} | {ws} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
+            "| `{run}` | {clk} | {ws} | {ts} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
                 run=r.get("run", "?"),
                 clk=_fmt(r.get("clk_ns"), 2),
                 ws=_fmt(r.get("wns_setup")),
+                ts=_fmt(r.get("tns_setup"), 1),
                 ns=_viol(r.get("n_setup_viol")),
                 wh=_fmt(r.get("wns_hold")),
                 # NOT `or "-"`: zero is falsy, so a run with no hold
