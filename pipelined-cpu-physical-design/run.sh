@@ -602,12 +602,35 @@ run_gls() {
         return
     fi
 
+    # IVERILOG WILL NOT DO THE SDF TIER, and this is a refusal rather than a
+    # warning because it produced a confidently wrong answer.
+    #
+    # The typical corner has +1.257 ns of slack at 3.9 ns. Every path has over
+    # a nanosecond of margin, so a correct timing simulation CANNOT produce
+    # wrong data there. iverilog produced wrong data anyway, with bits 2 and 3
+    # corrupted, while the same netlist at zero delay passes perfectly. The
+    # delays are being misapplied; iverilog's $sdf_annotate support is partial.
+    #
+    # A wrong result that looks like a real one is worse than no result, so
+    # this path stops. +force_iverilog overrides it for anyone who wants to
+    # look at the misapplication itself.
     if [ -n "$sdf" ]; then
-        echo "    simulator: iverilog"
-        echo "    WARNING: no xrun found, so TIMING CHECKS ARE NOT ENFORCED."
-        echo "             SDF path delays are applied, but a setup or hold"
-        echo "             violation will pass silently. For the real check run"
-        echo "             this on nanoHUB: startXcelium, then rerun."
+        case " $* " in
+            *" +force_iverilog "*) echo "    simulator: iverilog, SDF, RESULTS NOT TRUSTWORTHY" ;;
+            *)
+                echo "REFUSING: the SDF tier needs xrun, and xrun was not found."
+                echo "          iverilog applies SDF delays incorrectly on this design:"
+                echo "          the typ corner has +1.257 ns of slack and still comes back"
+                echo "          wrong, while zero delay passes. That is a broken measurement,"
+                echo "          not a broken design, and it must not be reported as a result."
+                echo
+                echo "          Zero delay works everywhere:   ./run.sh gls $name"
+                echo "          The timing tier needs nanoHUB, where xrun lives in"
+                echo "          /apps/cadencedigital/r21/bin and run.sh finds it itself."
+                echo "          Override with +force_iverilog if you want to see it anyway."
+                exit 1
+                ;;
+        esac
     fi
 
     command -v iverilog >/dev/null 2>&1 || { echo "MISSING: iverilog and xrun"; exit 1; }
