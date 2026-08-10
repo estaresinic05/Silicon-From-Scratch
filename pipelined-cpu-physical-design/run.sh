@@ -632,7 +632,7 @@ run_gls() {
             checkarg="-notimingchecks"
             echo "    simulator: xrun, zero delay, timing checks off"
         fi
-        "$XRUN" -timescale 1ps/1ps -access +rwc -negdelay $checkarg \
+        "$XRUN" -timescale 1ps/1ps -access +rwc $checkarg \
              -define GATE_SIM $modedef $sdfdef \
              -l "$log" \
              "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$netlist" "$cells" \
