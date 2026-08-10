@@ -8,7 +8,7 @@
 #   ./run.sh --name baseline --from cts      resume an existing run at CTS
 #   ./run.sh --name baseline --from report   re-report a routed run, no re-route
 #   ./run.sh --timing typ                    single typical corner, runs 00-03
-#   ./run.sh lec <run>                       formal equivalence, RTL vs netlist
+#   ./run.sh lec <run> [syn|routed]          formal equivalence, RTL vs netlist
 #   ./run.sh sim                             run the program on the RTL core
 #   ./run.sh gls <run> [corner] [+trace]     run it on the routed netlist
 #   ./run.sh libs                            fetch the slow/typ/fast libraries
@@ -165,8 +165,31 @@ collect() {
 # wrong netlist is worse than no check at all.
 run_lec() {
     local name="$1"
+    local which="${2:-syn}"
     local rundir="$ROOT/runs/$name"
     local netlist="$rundir/out/pipelined_cpu_core_netlist.v"
+
+    # WHICH NETLIST IS BEING PROVEN EQUIVALENT.
+    #
+    # 'syn' is the Genus netlist, which is what this check has always compared
+    # and which says nothing about place and route. route_opt_design rewrites
+    # the netlist after synthesis: it resizes cells, clones drivers, and pushes
+    # inversions across boundaries. A real flow re-runs equivalence after every
+    # optimisation step for exactly that reason, and this one never has.
+    #
+    # 'routed' compares the netlist that corresponds to the layout. Reach for
+    # it when the gate-level simulation disagrees with the RTL, because it
+    # separates "post-route optimisation changed the logic" from "the
+    # simulation harness is wrong", and nothing else does.
+    if [ "$which" = "routed" ]; then
+        netlist="$rundir/out/pipelined_cpu_core_routed.v"
+        [ -f "$netlist" ] || {
+            echo "No routed netlist at $netlist"
+            echo "         run '--from report' first."
+            exit 1
+        }
+        echo "### comparing the ROUTED netlist, not the synthesised one"
+    fi
 
     [ -f "$netlist" ] || { echo "No netlist at $netlist"; exit 1; }
     command -v lec >/dev/null 2>&1 || {
@@ -532,8 +555,8 @@ case "${1:-}" in
     gls)   [ -n "${2:-}" ] || { echo "usage: ./run.sh gls <run-name> [zero|slow|typ|fast] [+trace]"; exit 1; }
            shift; run_gls "$@"; exit 0 ;;
     table) "$PY" "$ROOT/scripts/qor.py" table --root "$ROOT"; exit 0 ;;
-    lec)   [ -n "${2:-}" ] || { echo "usage: ./run.sh lec <run-name>"; exit 1; }
-           run_lec "$2"; exit 0 ;;
+    lec)   [ -n "${2:-}" ] || { echo "usage: ./run.sh lec <run-name> [syn|routed]"; exit 1; }
+           run_lec "$2" "${3:-syn}"; exit 0 ;;
     -h|--help) usage 0 ;;
 esac
 
