@@ -36,7 +36,7 @@ BS = chr(92)  # a literal backslash, by code point, so no escape can eat it
 # version of this script matched the Genus spelling, found 30 of 31 registers in
 # the routed netlist, and would have left one of them at X with no warning at
 # all. Instance names survive both tools unchanged, so they are what is matched,
-# and the force lands on the flop's Q pin.
+# and the drive lands on the flop's scan pins.
 INST = re.compile(re.escape(BS) + r"(registers_RF_reg\[(\d+)\]\[(\d+)\])")
 
 
@@ -78,20 +78,33 @@ HEADER = """//******************************************************************
 //   In gates x18 is X and the loop accumulates X into the result.
 //
 // WHAT IT DOES
-//   Forces the architectural register nets to zero while reset is asserted,
-//   then releases them before the first writeback so the CPU drives them
-//   normally. This is the standard gate-level treatment of un-resettable
-//   state. It is not papering over the problem: run WITHOUT +define+GATE_SIM
-//   to watch the X propagate instead.
+//   Drives each flop's SCAN PORT during reset -- SE high, SI low -- so that
+//   the clock edges that occur while reset is asserted LOAD ZERO through the
+//   cell's own path. Then it releases, and the flop holds a real 0.
+//
+//   IT DOES NOT FORCE Q. That was the first version and it does not work: the
+//   Nangate model is `buf(Q, IQ)` over a UDP, so forcing the output overrides
+//   the buffer and never touches IQ. The register file looks initialised right
+//   up until the release, at which point every bit reverts to the X the UDP
+//   still holds. iverilog and Xcelium then disagree about how that X resolves,
+//   which is exactly the shape the bug had: two simulators, two different
+//   wrong answers, on a netlist Conformal had already proven equivalent.
+//
+//   Initialising through SE/SI uses the flop as a flop, so the state is real.
+//   It is not papering over anything either: run WITHOUT +define+GATE_SIM to
+//   watch the X propagate instead.
 //
 //   x0 has no flops. RISC-V hardwires it to zero, which is why the netlist
 //   holds 992 = 31 x 32 register bits and not 1024, and why this starts at 1.
 //
 // PATH
-//   {scope}.{bs}registers_RF_reg[R][B] .Q  -- the flop's output pin. Escaped
-//   identifiers are terminated by the space before the '.'. The INSTANCE is
-//   forced, not the net it drives, because Genus and Innovus name those nets
-//   differently and post-route buffering renames them again.
+//   {scope}.{bs}registers_RF_reg[R][B] .SE / .SI  -- the flop's scan pins.
+//   Escaped identifiers are terminated by the space before the '.'. The
+//   INSTANCE is addressed, not the net it drives, because Genus and Innovus
+//   name those nets differently and post-route buffering renames them again:
+//   Genus writes the vector {bs}registers_RF[24], Innovus writes
+//   registers_RF_24_0, and a cloned buffer makes it
+//   FE_OCPN1417_registers_RF_23__0.
 //*****************************************************************************
 """
 
@@ -116,14 +129,16 @@ def build(netlist_path):
     out.append("task rf_force;")
     out.append("  begin")
     for f in flops:
-        out.append("    force {}.{}{} .Q = 1'b0;".format(scope, BS, f))
+        out.append("    force {}.{}{} .SE = 1'b1;".format(scope, BS, f))
+        out.append("    force {}.{}{} .SI = 1'b0;".format(scope, BS, f))
     out.append("  end")
     out.append("endtask")
     out.append("")
     out.append("task rf_release;")
     out.append("  begin")
     for f in flops:
-        out.append("    release {}.{}{} .Q;".format(scope, BS, f))
+        out.append("    release {}.{}{} .SE;".format(scope, BS, f))
+        out.append("    release {}.{}{} .SI;".format(scope, BS, f))
     out.append("  end")
     out.append("endtask")
     return "\n".join(out) + "\n", len(flops), scope
