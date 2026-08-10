@@ -526,6 +526,15 @@ run_gls() {
     local plus=""
     [ -n "$period_ps" ] && plus="+period_ps=$period_ps"
 
+    # DELETE THE BINARY BEFORE BUILDING IT.
+    #
+    # A failed compile used to leave the PREVIOUS run's sim/gate.vvp in place,
+    # and vvp then happily ran it. That produced a full, plausible, completely
+    # wrong result: byte-identical output from a different netlist, which read
+    # as "the fix changed nothing" when in fact nothing had been rebuilt. An
+    # invalid rf_init_gates.vh is exactly how it happens.
+    rm -f "$ROOT/sim/gate.vvp"
+
     echo "=== GATE-LEVEL simulation: $name, corner '$corner' =============="
     echo "    netlist : $netlist"
     [ -n "$sdf" ] && echo "    sdf     : $sdf"

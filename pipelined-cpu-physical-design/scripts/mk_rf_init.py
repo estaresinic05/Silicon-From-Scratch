@@ -60,7 +60,7 @@ def resettable(cells_text, cell_types):
     """
     for cell in set(cell_types):
         m = re.search(r"(?ms)^module\s+" + re.escape(cell) + r"\s*\((.*?)\)", cells_text)
-        if not m or not re.search(r"(RN|SN)", m.group(1)):
+        if not m or not re.search(r"\b(RN|SN)\b", m.group(1)):
             return False
     return True
 
@@ -142,20 +142,38 @@ def build(netlist_path):
 
     scope = find_scope(text)
 
+    try:
+        cells_text = Path("sim/cells/NangateOpenCellLibrary.v").read_text(errors="replace")
+    except OSError:
+        cells_text = ""
+
     out = [HEADER.format(src=netlist_path, n=len(flops), scope=scope, bs=BS)]
+
+    # NOTHING TO FAKE once reg_file.v resets RF for real: synthesis maps it to
+    # a flop with a reset pin and the netlist initialises itself, the way the
+    # silicon does. The tasks still exist so the testbench needs no conditional
+    # compilation; they simply do nothing.
+    if cells_text and resettable(cells_text, [c for _, c in flops]):
+        out.append("// The register file is RESETTABLE in this netlist, so there is nothing")
+        out.append("// to force. reg_file.v resets RF, synthesis mapped it to a flop with a")
+        out.append("// reset pin, and the design initialises itself.")
+        out.append("task rf_force;   begin end endtask")
+        out.append("task rf_release; begin end endtask")
+        return "\n".join(out) + "\n", 0, scope
+
     out.append("task rf_force;")
     out.append("  begin")
-    for f in flops:
-        out.append("    force {}.{}{} .SE = 1'b1;".format(scope, BS, f))
-        out.append("    force {}.{}{} .SI = 1'b0;".format(scope, BS, f))
+    for name, _cell in flops:
+        out.append("    force {}.{}{} .SE = 1'b1;".format(scope, BS, name))
+        out.append("    force {}.{}{} .SI = 1'b0;".format(scope, BS, name))
     out.append("  end")
     out.append("endtask")
     out.append("")
     out.append("task rf_release;")
     out.append("  begin")
-    for f in flops:
-        out.append("    release {}.{}{} .SE;".format(scope, BS, f))
-        out.append("    release {}.{}{} .SI;".format(scope, BS, f))
+    for name, _cell in flops:
+        out.append("    release {}.{}{} .SE;".format(scope, BS, name))
+        out.append("    release {}.{}{} .SI;".format(scope, BS, name))
     out.append("  end")
     out.append("endtask")
     return "\n".join(out) + "\n", len(flops), scope
