@@ -8,7 +8,7 @@
 #   ./run.sh --name baseline --from cts      resume an existing run at CTS
 #   ./run.sh --name baseline --from report   re-report a routed run, no re-route
 #   ./run.sh --timing typ                    single typical corner, runs 00-03
-#   ./run.sh lec <run> [syn|routed]          formal equivalence, RTL vs netlist
+#   ./run.sh lec <run> [syn|routed|gate]     equivalence; gate = syn vs routed
 #   ./run.sh sim                             run the program on the RTL core
 #   ./run.sh gls <run> [corner] [+trace]     run it on the routed netlist
 #   ./run.sh libs                            fetch the slow/typ/fast libraries
@@ -346,6 +346,68 @@ get_libs() {
 #
 # Fetched rather than committed, the same as the GDS. The models carry Nangate's
 # copyright notice and are pulled from where the library was published.
+# Compare the SYNTHESISED netlist against the ROUTED one, gate against gate.
+#
+# THIS IS A TIGHTER CHECK THAN EITHER AGAINST THE RTL, and it exists because
+# the RTL comparison passed while the routed netlist simulated wrong.
+#
+# Comparing a netlist to RTL needs relaxations: `set flatten model
+# -seq_constant` so Conformal models the flops Genus proved constant and
+# deleted, and -seq_constant_x_to 0 for the register file's missing reset.
+# Those relaxations are correct for that comparison and they widen it.
+#
+# Gate against gate needs NONE of them. Both sides have the same flops, the
+# same names and the same structure, so every key point maps one to one and
+# any difference place and route introduced has nowhere to hide. If this fails
+# while the RTL comparison passed, the relaxations were masking it.
+run_lec_gate() {
+    local name="$1"
+    local rundir="$ROOT/runs/$name"
+    local syn="$rundir/out/${DESIGN}_netlist.v"
+    local routed="$rundir/out/${DESIGN}_routed.v"
+
+    [ -f "$syn" ]    || { echo "No synthesised netlist at $syn"; exit 1; }
+    [ -f "$routed" ] || { echo "No routed netlist at $routed"; exit 1; }
+    command -v lec >/dev/null 2>&1 || {
+        echo "MISSING: lec is not on your PATH."
+        echo "         try: export PATH=/apps/cadencedigital/r23/bin:\$PATH"
+        exit 1
+    }
+
+    cat > "$rundir/lec_gate.do" <<EOF
+// Conformal LEC: the SYNTHESISED netlist (golden) against the ROUTED one.
+set log file lec_gate.log -replace
+
+// No modelling relaxations. Both sides are gates, so anything that does not
+// map one to one is a real difference and must be reported as one.
+set undefined cell black_box
+
+read library -liberty $NG45/lib/NangateOpenCellLibrary_typical.lib -both
+
+read design $syn    -verilog -golden  -sensitive -continuousassignment bidirectional
+read design $routed -verilog -revised -sensitive -continuousassignment bidirectional
+
+set system mode lec
+add compared points -all
+compare
+
+report compare data    > $rundir/reports/63_lecgate_compare.rpt
+report unmapped points > $rundir/reports/64_lecgate_unmapped.rpt
+report verification    > $rundir/reports/65_lecgate_verification.rpt
+
+exit -force
+EOF
+
+    echo "=== EQUIVALENCE: synthesised netlist vs routed netlist ==========="
+    mkdir -p "$rundir/reports"
+    (cd "$rundir" && lec -nogui -dofile lec_gate.do)
+    echo
+    cat "$rundir/reports/65_lecgate_verification.rpt" 2>/dev/null || echo "(no report written)"
+    echo
+    echo "Non-equivalent points, if any:"
+    grep -c "Non-equivalent" "$rundir/reports/63_lecgate_compare.rpt" 2>/dev/null || true
+}
+
 get_cells() {
     echo "=== fetching the Nangate45 Verilog cell models ==================="
     mkdir -p "$ROOT/sim/cells"
@@ -604,8 +666,9 @@ case "${1:-}" in
     gls)   [ -n "${2:-}" ] || { echo "usage: ./run.sh gls <run-name> [zero|slow|typ|fast] [+trace]"; exit 1; }
            shift; run_gls "$@"; exit 0 ;;
     table) "$PY" "$ROOT/scripts/qor.py" table --root "$ROOT"; exit 0 ;;
-    lec)   [ -n "${2:-}" ] || { echo "usage: ./run.sh lec <run-name> [syn|routed]"; exit 1; }
-           run_lec "$2" "${3:-syn}"; exit 0 ;;
+    lec)   [ -n "${2:-}" ] || { echo "usage: ./run.sh lec <run-name> [syn|routed|gate]"; exit 1; }
+           if [ "${3:-syn}" = "gate" ]; then run_lec_gate "$2"; else run_lec "$2" "${3:-syn}"; fi
+           exit 0 ;;
     -h|--help) usage 0 ;;
 esac
 

@@ -441,6 +441,33 @@ module tb_cpu_core;
   endtask
 
   // ----------------------------------------------------------------------
+  // Per-cycle port dump, for finding where two netlists diverge.
+  //
+  // +cycdump=N prints every port the core drives, once per cycle, for N
+  // cycles. Run it against the RTL, the synthesised netlist and the routed
+  // netlist and diff the three: the first line that differs is the cycle the
+  // problem starts, which is far more use than the first WRONG WRITE, because
+  // by then the cause is several stages upstream.
+  // ----------------------------------------------------------------------
+  integer cycdump;
+  integer got_dump;
+
+  initial begin
+    cycdump = 0;
+    got_dump = $value$plusargs("cycdump=%d", cycdump);
+    if (cycdump > 0) begin
+      @(negedge reset);
+      $display("CYC IMADDR   INSTR    DBGPC    WBE WBA WBD      DMADDR   DMW DMR DMWDATA");
+      while (cycle_count < cycdump) begin
+        @(negedge clk);
+        $display("%3d %08h %08h %08h  %b  %2d %08h %08h  %b   %b  %08h", cycle_count, imem_addr,
+                 imem_rdata, dbg_pc, dbg_wb_enable, dbg_wb_addr, dbg_wb_data, dmem_addr,
+                 dmem_write, dmem_read, dmem_wdata);
+      end
+    end
+  end
+
+  // ----------------------------------------------------------------------
   // SDF back-annotation, for the timing tier.
   //
   // Without this the gate run is zero-delay: it proves the netlist computes
