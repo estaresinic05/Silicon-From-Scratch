@@ -9,7 +9,10 @@
 #   ./run.sh --name baseline --from report   re-report a routed run, no re-route
 #   ./run.sh --timing typ                    single typical corner, runs 00-03
 #   ./run.sh lec <run>                       formal equivalence, RTL vs netlist
+#   ./run.sh sim                             run the program on the RTL core
+#   ./run.sh gls <run> [corner] [+trace]     run it on the routed netlist
 #   ./run.sh libs                            fetch the slow/typ/fast libraries
+#   ./run.sh cells                           fetch the Verilog cell models
 #   ./run.sh gds                             fetch the Nangate45 stream file
 #   ./run.sh table                           rebuild results/QOR.md
 #
@@ -36,6 +39,21 @@ ROOT=$(pwd)
 export PNR_ROOT="$ROOT"
 
 NG45=$HOME/MacroPlacement/Enablements/NanGate45
+DESIGN=pipelined_cpu_core
+
+# nanoHUB has python3; a Windows laptop generally has only "python", and the
+# gate-level simulation is meant to run there. Resolve it once.
+#
+# Each candidate is EXECUTED, not merely located. Windows ships an App Execution
+# Alias called python3.exe that exists on PATH, satisfies `command -v`, and then
+# refuses to run with an advert for the Microsoft Store. Testing for presence
+# picks it every time.
+PY=""
+for _c in python3 python py; do
+    if command -v "$_c" >/dev/null 2>&1 && "$_c" -c "import sys" >/dev/null 2>&1; then
+        PY="$_c"; break
+    fi
+done
 
 PERIOD=3.0
 NAME=""
@@ -53,7 +71,7 @@ usage() {
     # The line range is the comment block at the top of this file. It moves
     # whenever that block grows, and nothing catches it but reading the output,
     # so `./run.sh --help` is worth an eye after editing the header.
-    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -131,8 +149,8 @@ run_pnr() {
 }
 
 collect() {
-    command -v python3 >/dev/null 2>&1 || { echo "python3 not found, skipping QOR"; return; }
-    python3 "$ROOT/scripts/qor.py" collect "$ROOT/runs/$NAME" --note "$NOTE" --root "$ROOT"
+    [ -n "$PY" ] || { echo "no python found, skipping QOR"; return; }
+    "$PY" "$ROOT/scripts/qor.py" collect "$ROOT/runs/$NAME" --note "$NOTE" --root "$ROOT"
 }
 
 # Formal equivalence: does the gate netlist still compute what the RTL says?
@@ -296,6 +314,109 @@ get_libs() {
     ls -l "$NG45/lib/"NangateOpenCellLibrary_*.lib
 }
 
+# Verilog behaviour for the standard cells, which the enablement does not ship.
+#
+# Liberty describes a cell's TIMING, LEF its SHAPE, and neither says what it
+# COMPUTES. A simulator needs the third view, and it is in none of the three
+# places this project already pulls from: not the MacroPlacement enablement,
+# not ORFS's nangate45 platform, not OpenROAD's test/Nangate45. All checked.
+#
+# Fetched rather than committed, the same as the GDS. The models carry Nangate's
+# copyright notice and are pulled from where the library was published.
+get_cells() {
+    echo "=== fetching the Nangate45 Verilog cell models ==================="
+    mkdir -p "$ROOT/sim/cells"
+    if [ -f "$ROOT/sim/cells/NangateOpenCellLibrary.v" ]; then
+        echo "  already present: sim/cells/NangateOpenCellLibrary.v"
+    else
+        curl -fL -o "$ROOT/sim/cells/NangateOpenCellLibrary.v" \
+          https://raw.githubusercontent.com/JulianKemmerer/Drexel-ECEC575/master/Encounter/NangateOpenCellLibrary/Front_End/Verilog/NangateOpenCellLibrary.v
+    fi
+    ls -l "$ROOT/sim/cells/"
+}
+
+# Run programs/program.mem on the RTL core. This is the baseline the gate run
+# is compared against, and it uses the SAME testbench, so any difference
+# between the two is the netlist and not the harness.
+run_sim_rtl() {
+    command -v iverilog >/dev/null 2>&1 || { echo "MISSING: iverilog"; exit 1; }
+    echo "=== RTL core simulation ========================================="
+    iverilog -g2012 -o "$ROOT/sim/rtl.vvp" \
+        "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$ROOT"/rtl/*.v || exit 1
+    (cd "$ROOT" && vvp sim/rtl.vvp "$@")
+}
+
+# Run the same program on the netlist.
+#
+#     ./run.sh gls 06-clk3p9              zero-delay, on the routed netlist
+#     ./run.sh gls 06-clk3p9 slow         back-annotated with the slow SDF
+#
+# TWO DEFINES ARE LOAD BEARING.
+#
+#   GATE_SIM  turns on rf_init_gates.vh, which holds the register file at zero
+#             through reset. The netlist's register file has no reset, because
+#             reg_file.v initialises RF in an `initial` block and synthesis
+#             ignores those. Without it this program is X from instruction 25,
+#             `add x18, x18, x17`, which reads x18 before writing it.
+#
+#   TETRAMAX  suppresses ng_xbuf inside the Nangate models. Without it they
+#             DRIVE THEIR OWN RN INPUT PORT, iverilog reports "input port RN is
+#             coerced to inout" a few hundred times, the asynchronous resets
+#             never take, and the whole design sits at X forever. The symptom
+#             looks like a broken netlist and is entirely the cell models.
+run_gls() {
+    local name="$1"; shift
+    # A bare word after the run name is the corner; anything starting with '+'
+    # is a plusarg for the simulation and is passed straight through.
+    local corner="zero"
+    if [ $# -gt 0 ] && [ "${1#+}" = "$1" ]; then corner="$1"; shift; fi
+    local rundir="$ROOT/runs/$name"
+    local cells="$ROOT/sim/cells/NangateOpenCellLibrary.v"
+    local netlist="$rundir/out/${DESIGN}_routed.v"
+    local defines="-DGATE_SIM -DTETRAMAX"
+    local extra=""
+
+    command -v iverilog >/dev/null 2>&1 || { echo "MISSING: iverilog"; exit 1; }
+    [ -f "$cells" ] || { echo "MISSING: $cells"; echo "         run: ./run.sh cells"; exit 1; }
+
+    if [ ! -f "$netlist" ]; then
+        # The pre-layout netlist is a fallback and it is NOT the layout. It has
+        # no clock tree and none of the post-route optimisation, so it answers
+        # "does synthesis work", not "does the thing we built work".
+        netlist="$rundir/out/${DESIGN}_netlist.v"
+        [ -f "$netlist" ] || { echo "No netlist in $rundir/out."; exit 1; }
+        echo "NOTE: no routed netlist in this run, falling back to the Genus one."
+        echo "      Re-run '--from report' to write ${DESIGN}_routed.v."
+    fi
+
+    # The clock the run was built at, in ps, so a timing-annotated simulation
+    # is exercised at the period its delays were extracted for.
+    local period_ps=10000
+    if [ -f "$rundir/RUN.env" ]; then
+        period_ps=$(awk -F= '/CLK_PERIOD/{printf "%d", $2 * 1000}' "$rundir/RUN.env")
+    fi
+
+    if [ "$corner" != "zero" ]; then
+        local sdf="$rundir/out/${DESIGN}_${corner}.sdf"
+        [ -f "$sdf" ] || { echo "No SDF at $sdf"; echo "         re-run '--from report' to write it."; exit 1; }
+        defines="$defines -DSDF_FILE=\"$sdf\""
+        extra="-gspecify"
+        echo "NOTE: iverilog honours SDF path delays but enforces timing checks"
+        echo "      only partially. Xcelium is the tool for a real timing check."
+    fi
+
+    # Regenerated from THIS netlist every time, so the forced register names
+    # can never be stale relative to the netlist being simulated.
+    "$PY" "$ROOT/scripts/mk_rf_init.py" "$netlist" -o "$ROOT/sim/rf_init_gates.vh" || exit 1
+
+    echo "=== GATE-LEVEL simulation: $name, corner '$corner' =============="
+    echo "    netlist : $netlist"
+    echo "    period  : $period_ps ps"
+    eval iverilog -g2012 $extra $defines -o "$ROOT/sim/gate.vvp" \
+        "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$netlist" "$cells" || exit 1
+    (cd "$ROOT" && vvp sim/gate.vvp +period_ps=$period_ps "$@")
+}
+
 get_gds() {
     echo "=== fetching Nangate45 stream file =============================="
     mkdir -p "$HOME/nangate45_gds"
@@ -310,7 +431,11 @@ get_gds() {
 case "${1:-}" in
     gds)   get_gds; exit 0 ;;
     libs)  get_libs; exit 0 ;;
-    table) python3 "$ROOT/scripts/qor.py" table --root "$ROOT"; exit 0 ;;
+    cells) get_cells; exit 0 ;;
+    sim)   shift; run_sim_rtl "$@"; exit 0 ;;
+    gls)   [ -n "${2:-}" ] || { echo "usage: ./run.sh gls <run-name> [zero|slow|typ|fast] [+trace]"; exit 1; }
+           shift; run_gls "$@"; exit 0 ;;
+    table) "$PY" "$ROOT/scripts/qor.py" table --root "$ROOT"; exit 0 ;;
     lec)   [ -n "${2:-}" ] || { echo "usage: ./run.sh lec <run-name>"; exit 1; }
            run_lec "$2"; exit 0 ;;
     -h|--help) usage 0 ;;

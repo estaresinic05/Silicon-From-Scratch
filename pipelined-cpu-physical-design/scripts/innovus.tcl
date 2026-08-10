@@ -364,6 +364,17 @@ saveDesign enc/06_final.enc
 # Each of these is wrapped on its own. By this point the design is routed
 # and saved, and a report command with an option this version dislikes must
 # not be what destroys the run.
+#
+# saveNetlist is what makes GATE-LEVEL SIMULATION possible. Genus already
+# wrote a netlist, but that one is pre-layout: it has no clock tree in it and
+# none of the post-route optimisation. This is the netlist that corresponds to
+# the layout, and running the program on it is the only way to watch the thing
+# that was actually built execute.
+#
+# -excludeLeafCell leaves out empty module definitions for the standard cells.
+# The simulator gets its cell behaviour from the Nangate Verilog models
+# instead, and a stub definition here would collide with the real one.
+# Physical-only cells are already absent: a filler has no function to simulate.
 foreach {label cmd} [list \
     "connectivity" {verify_connectivity -error 0 -geom_connect -no_antenna} \
     "drc"          {verify_drc -limit 100} \
@@ -373,6 +384,7 @@ foreach {label cmd} [list \
     "power"        {report_power > reports/43_final_power.rpt} \
     "summary"      {summaryReport -noHtml -outfile reports/44_summary.rpt} \
     "def"          {defOut -netlist -floorplan -routing ${DESIGN}_final.def} \
+    "netlist"      {saveNetlist out/${DESIGN}_routed.v -excludeLeafCell} \
 ] {
     if {[catch {eval $cmd} msg]} {
         puts "### report '$label' failed, continuing: $msg"
@@ -590,6 +602,18 @@ if {$DROPPED > 0} {
         corner_step report_$tag \
             "report_timing -late  -view $view -max_paths 50 -nworst 1 > reports/40_setup_${tag}.rpt
              report_timing -early -view $view -max_paths 50 -nworst 1 > reports/41_hold_${tag}.rpt"
+
+        # One SDF per corner, for timing-annotated gate-level simulation.
+        #
+        # The SDF carries this corner's delay for every cell instance and every
+        # net. Simulating with it is the only check in the flow that runs the
+        # PROGRAM against the layout's real timing; STA proves every path
+        # exhaustively but executes nothing, and a zero-delay gate run executes
+        # the program but believes every gate is instant.
+        #
+        # A file per corner, because a delay is meaningless without one.
+        corner_step sdf_$tag \
+            "write_sdf -view $view out/${DESIGN}_${tag}.sdf"
     }
 
     # -expandedViews adds a block per active view to the summary, under the

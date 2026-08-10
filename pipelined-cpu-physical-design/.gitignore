@@ -37,3 +37,15 @@ __pycache__/
 # Uncropped originals of the screenshots. Useful locally, not worth
 # committing beside the cropped versions that go in the README.
 *.orig.png
+
+# Simulation build products. The testbench and the memory models are committed;
+# everything below is fetched or generated and would only churn.
+#
+# sim/cells/ holds Nangate's Verilog cell models, which carry their own
+# copyright notice and are fetched by './run.sh cells' the same way the GDS is.
+# rf_init_gates.vh is regenerated from whichever netlist is being simulated,
+# by './run.sh gls', so a committed copy could only ever be stale.
+sim/cells/
+sim/rf_init_gates.vh
+sim/*.vvp
+sim/*.vcd

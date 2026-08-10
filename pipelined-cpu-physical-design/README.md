@@ -165,6 +165,72 @@ the same check at each corner; the signoff one is slow.
 
 ---
 
+## Running the program on the layout
+
+Static timing analysis proves every path in the design and executes nothing.
+Gate-level simulation executes the program on the netlist that was actually
+built. They answer different questions and neither replaces the other.
+
+```
+./run.sh cells                     fetch the Nangate Verilog cell models, once
+./run.sh sim                       run program.mem on the RTL core
+./run.sh gls 06-clk3p9             run the same program on the routed netlist
+./run.sh gls 06-clk3p9 slow +trace with the slow corner's SDF, printing writes
+```
+
+Both use **the same testbench**, `sim/tb_cpu_core.v`, because the RTL core and
+the netlist present the same module name and the same ports. Any difference in
+what it reports is the netlist and not the harness.
+
+### It cannot use the RTL testbench, and that is the interesting part
+
+`pipelined-cpu/testbench/` reads `dut.datapath.registers.RF[k]` and five
+internal control signals by hierarchical reference. **None of those survive
+synthesis.** The register file becomes 992 flip-flops with names like
+`registers_RF_reg[7][0]` and the control signals become wires numbered by the
+tool.
+
+So this testbench watches only the ports, which is all a real chip would give
+you. The oracle is the **writeback trace**: `dbg_wb_enable`, `dbg_wb_addr` and
+`dbg_wb_data` are the register file's write port brought to the boundary, and
+every architectural write appears there in order. A golden RV32I model produces
+the sequence the program must perform, and the observed sequence is compared
+against it element by element. A lost flush shows up as an extra write, a lost
+stall as a wrong value. Data memory is checked directly, because the memories
+sit outside the core and the testbench owns them.
+
+### Two things bite, and both are recorded rather than papered over
+
+**The register file has no reset in gates.** `reg_file.v` zeroes RF in an
+`initial` block; simulation honours it and synthesis ignores it. This program
+reads x18 at instruction 25 before anything writes it, so in gates x18 is X and
+the loop accumulates X. `+define+GATE_SIM` holds the register nets at zero
+through reset, which is the standard treatment of un-resettable state. Run
+without it to watch the X spread. **This is a property of the program**: real
+silicon powers up with whatever the register file happens to hold.
+
+**The Nangate models drive their own reset pin.** Without `+define+TETRAMAX`
+they call `ng_xbuf` on the `RN` input port, iverilog reports "input port RN is
+coerced to inout" a few hundred times, the asynchronous resets never take, and
+the entire design sits at X forever. It looks exactly like a broken netlist and
+is entirely the cell models. `run.sh gls` sets both defines.
+
+### What a good run looks like
+
+```
+writes observed   : 25 of 25
+cycles to last    : 48
+instructions      : 34 dynamic
+cycles/instruction: 1.41
+```
+
+Identical to the RTL run, which is the point. **34 instructions in 48 cycles at
+the closing period is the execution time**, and it is the number the pipelined
+against single-cycle comparison turns on, since frequency alone flatters a
+pipeline that stalls.
+
+---
+
 ## The flow, stage by stage
 
 Innovus saves the database after every stage into `runs/<name>/enc/`. If
