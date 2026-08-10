@@ -471,14 +471,31 @@ run_gls() {
     local log="$ROOT/sim/gls_${name}_${corner}.log"
     mkdir -p "$ROOT/sim"
 
-    if [ -n "$sdf" ] && command -v xrun >/dev/null 2>&1; then
-        echo "    simulator: xrun, timing checks ENFORCED"
+    # XCELIUM WHENEVER IT IS THERE, with or without an SDF.
+    #
+    # It enforces the timing checks, and it is also the tool that reads Innovus
+    # netlists every day. iverilog simulates this design's GENUS netlist
+    # correctly and its ROUTED netlist incorrectly, with the same testbench,
+    # the same cell models, at zero delay, at every clock period tried, and
+    # whatever the register file is forced to. Conformal compared that routed
+    # netlist against the RTL and returned PASS with Incomplete verification: 0,
+    # so the layout matches the design and the discrepancy is in how the
+    # netlist is being simulated. Running the zero-delay tier on Xcelium too
+    # takes the simulator out of the list of variables instead of leaving it in.
+    if command -v xrun >/dev/null 2>&1; then
+        local sdfdef=""
+        if [ -n "$sdf" ]; then
+            sdfdef="-define SDF_FILE=\"$sdf\""
+            echo "    simulator: xrun, timing checks ENFORCED"
+        else
+            echo "    simulator: xrun, zero delay"
+        fi
         xrun -timescale 1ps/1ps -access +rwc -negdelay \
-             -define GATE_SIM -define TETRAMAX -define "SDF_FILE=\"$sdf\"" \
+             -define GATE_SIM -define TETRAMAX $sdfdef \
              -l "$log" \
              "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$netlist" "$cells" \
              $plus "$@"
-        summarise_violations "$log"
+        [ -n "$sdf" ] && summarise_violations "$log"
         return
     fi
 
