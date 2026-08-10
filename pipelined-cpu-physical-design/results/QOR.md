@@ -7,12 +7,15 @@ Slacks are nanoseconds, worst path, post-route unless the column says
 otherwise. A negative setup WNS means the run did not make timing at
 that clock. Frozen reports for every run are in `results/<run>/reports/`.
 
-| Run | Clk | Setup WNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `00-baseline` | 3.00 | 0.009 | 0 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
-| `01-split-uncertainty` | 3.00 | 0.009 | 0 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
-| `02-clk2p8` | 2.80 | 0.002 | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
-| `03-ring-fix` | 2.80 | 0.002 | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | ring spacing 1.5um, clears the four MetSpc violations |
+| Run | Clk | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `00-baseline` | 3.00 | 0.009 | - | 0 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
+| `01-split-uncertainty` | 3.00 | 0.009 | - | 0 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
+| `02-clk2p8` | 2.80 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
+| `03-ring-fix` | 2.80 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | ring spacing 1.5um, clears the four MetSpc violations |
+| `04-mmmc-analysis` | 2.80 | -0.968 | -82.8 | 362 | -0.155 | 50 | 6,752 | 85.1% | 84,689 | corner penalty only, run 03 netlist, not reproducible from HEAD |
+| `05-mmmc-full` | 2.80 | -1.060 | -89.2 | 541 | -0.083 | 14 | 7,305 | 78.3% | 85,240 | synthesised at slow, judged at slow/fast |
+| `06-clk3p9` | 3.90 | -0.066 | -1.3 | 45 | 0.011 | 0 | 8,148 | 82.7% | 93,039 | 3.9 ns at slow; misses by 66 ps, hold clean |
 
 ## Stage progression
 
@@ -25,3 +28,6 @@ problem is in synthesis, in placement, in the clock tree or in the routing.
 | `01-split-uncertainty` | 0.019 | 0.018 | 0.009 | 0.001 | 0.009 |
 | `02-clk2p8` | 0.001 | 0.000 | 0.002 | 0.001 | -0.002 |
 | `03-ring-fix` | 0.001 | 0.000 | 0.002 | 0.001 | -0.002 |
+| `04-mmmc-analysis` | -1.356 | -0.953 | -0.968 | -0.403 | 0.015 |
+| `05-mmmc-full` | -1.204 | -1.060 | -1.060 | -0.144 | 0.000 |
+| `06-clk3p9` | -0.115 | -0.055 | -0.066 | -0.060 | 0.011 |
