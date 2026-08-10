@@ -177,7 +177,12 @@ set undefined cell black_box
 // number to read. Zero non-equivalent with points still unmapped is not a pass.
 set flatten model -seq_constant
 set flatten model -seq_constant_x_to 0
-set flatten model -seq_merge
+
+// NOT -seq_merge. It was added here speculatively, on no symptom, and merging
+// equivalent flops is exactly the transform that mangles a shift register's
+// key points. memToReg is a plain four-deep shift chain, IFID to IDEX to
+// EXMEM to MEMWB, and it was the one sequential point still failing while it
+// was on. Add an option because a report asks for it, not in case it helps.
 
 read library -liberty $NG45/lib/NangateOpenCellLibrary_typical.lib -revised
 
