@@ -387,6 +387,32 @@ run_sim_rtl() {
 #             coerced to inout" a few hundred times, the asynchronous resets
 #             never take, and the whole design sits at X forever. The symptom
 #             looks like a broken netlist and is entirely the cell models.
+# Locate Xcelium.
+#
+# xrun IS NOT IN THE TREE THAT CARRIES GENUS AND INNOVUS. nanoHUB keeps nine
+# Cadence digital releases side by side -- r6 r8 r9 r12 r20 r21 r22 r23 current
+# dev -- and Xcelium is only in the older six. r23/bin holds a startXcelium
+# launcher that prints "Xcelium can be run with the xrun command" and sets up
+# nothing, so the tool looks absent from every shell.
+#
+# This is the same trap as the original one: `command not found` meant the PATH
+# pointed at one directory out of several, not that the tool was missing.
+#
+# The result is APPENDED to PATH by the caller, never prepended: r21/bin almost
+# certainly carries its own genus and innovus, and putting it first would
+# silently move the whole implementation flow two releases backwards.
+find_xrun() {
+    if command -v xrun >/dev/null 2>&1; then echo xrun; return; fi
+    local c n best="" bestn=-1
+    for c in /apps/cadencedigital/*/bin/xrun; do
+        [ -x "$c" ] || continue
+        n=$(echo "$c" | sed -n 's|.*/cadencedigital/r\([0-9]\{1,\}\)/bin/xrun||p')
+        [ -n "$n" ] || continue
+        if [ "$n" -gt "$bestn" ]; then bestn="$n"; best="$c"; fi
+    done
+    [ -n "$best" ] && echo "$best"
+}
+
 run_gls() {
     local name="$1"; shift
     # A bare word after the run name is the corner; anything starting with '+'
@@ -471,6 +497,11 @@ run_gls() {
     local log="$ROOT/sim/gls_${name}_${corner}.log"
     mkdir -p "$ROOT/sim"
 
+    local XRUN
+    # || true, because find_xrun exits non-zero when there is no Xcelium
+    # and `set -e` turns that into a silent abort of the whole script.
+    XRUN=$(find_xrun || true)
+
     # XCELIUM WHENEVER IT IS THERE, with or without an SDF.
     #
     # It enforces the timing checks, and it is also the tool that reads Innovus
@@ -482,7 +513,8 @@ run_gls() {
     # so the layout matches the design and the discrepancy is in how the
     # netlist is being simulated. Running the zero-delay tier on Xcelium too
     # takes the simulator out of the list of variables instead of leaving it in.
-    if command -v xrun >/dev/null 2>&1; then
+    if [ -n "$XRUN" ]; then
+        echo "    xrun     : $XRUN"
         local sdfdef=""
         if [ -n "$sdf" ]; then
             sdfdef="-define SDF_FILE=\"$sdf\""
@@ -490,7 +522,7 @@ run_gls() {
         else
             echo "    simulator: xrun, zero delay"
         fi
-        xrun -timescale 1ps/1ps -access +rwc -negdelay \
+        "$XRUN" -timescale 1ps/1ps -access +rwc -negdelay \
              -define GATE_SIM -define TETRAMAX $sdfdef \
              -l "$log" \
              "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$netlist" "$cells" \
@@ -501,7 +533,7 @@ run_gls() {
 
     if [ -n "$sdf" ]; then
         echo "    simulator: iverilog"
-        echo "    WARNING: xrun is not on PATH, so TIMING CHECKS ARE NOT ENFORCED."
+        echo "    WARNING: no xrun found, so TIMING CHECKS ARE NOT ENFORCED."
         echo "             SDF path delays are applied, but a setup or hold"
         echo "             violation will pass silently. For the real check run"
         echo "             this on nanoHUB: startXcelium, then rerun."
