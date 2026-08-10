@@ -147,6 +147,38 @@ set log file lec.log -replace
 // which is the one outcome that must never happen quietly.
 set undefined cell black_box
 
+// MODEL WHAT SYNTHESIS ACTUALLY DID TO THE SEQUENTIAL LOGIC.
+//
+// Genus proves flops constant and deletes them, which is correct and is not
+// something LEC knows by default. Without these the deleted flops stay in
+// golden as UNMAPPED key points, and an unmapped key point is treated as a
+// free variable: golden is then allowed to do things the real design cannot,
+// and every compared point downstream of it fails.
+//
+// That is exactly what the first run produced. Five deleted flops caused 35
+// non-equivalent points:
+//
+//   IDEX_operation_reg[3]  IFID_operation is 4 bits and the control unit only
+//                          emits 0000/0001/0010/0110/0111, so bit 3 is never
+//                          set. Freeing it let the ALU perform an operation
+//                          the CPU cannot issue, and all 32 bits of
+//                          EXMEM_aluResult_reg mismatched.
+//   IF_pc_reg[0]           the PC steps by 4, so bit 0 is constant zero.
+//   IFID_pc_reg[0]         same, one stage on. imem_addr[0] and dbg_pc[0]
+//                          failed because of these two.
+//   *_memToReg_reg         folded into the control it feeds.
+//
+// -seq_constant_x_to 0 is needed on top, for register x0. reg_file.v zeroes RF
+// in an INITIAL block, which simulation honours and synthesis ignores, so
+// RF[0] has no reset and Conformal models it as a latch holding X rather than
+// a constant. It is dead either way, gated on write and muxed on read.
+//
+// These relax the check, so the unmapped count is reported below and is the
+// number to read. Zero non-equivalent with points still unmapped is not a pass.
+set flatten model -seq_constant
+set flatten model -seq_constant_x_to 0
+set flatten model -seq_merge
+
 read library -liberty $NG45/lib/NangateOpenCellLibrary_typical.lib -revised
 
 read design $rtl_files -verilog -golden -sensitive -continuousassignment bidirectional
@@ -173,7 +205,10 @@ EOF
     echo "--- verification result ---"
     cat "$rundir/reports/62_lec_verification.rpt" 2>/dev/null || echo "(no report written)"
     echo
-    echo "Non-equivalent must be 0 AND unmapped must be understood."
+    echo "--- unmapped key points (must be 0, or understood) ---"
+    grep -iE "Not-mapped|unmapped" "$rundir/reports/61_lec_unmapped.rpt" 2>/dev/null | head -5
+    echo
+    echo "PASS = Compare Results: Equivalent, AND no unmapped key points."
     echo "Reports: runs/$name/reports/6*_lec_*.rpt"
 }
 
