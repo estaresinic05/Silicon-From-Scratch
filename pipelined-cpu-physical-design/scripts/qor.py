@@ -33,11 +33,27 @@ KEEP = [
     "03_syn_timing.rpt", "04_syn_unconstrained.rpt", "05_syn_power.rpt",
     "10_place_timing.rpt", "20_cts_setup.rpt", "21_cts_hold.rpt",
     "40_final_setup.rpt", "41_final_hold.rpt", "42_final_area.rpt",
-    "43_final_power.rpt", "44_summary.rpt",
+    "43_final_power.rpt", "44_summary.rpt", "49_corner_status.rpt",
 ]
+
+# The three reporting corners, in the order they are printed. These are the
+# tags innovus.tcl uses in its filenames, and RPT_<TAG> is the analysis view
+# behind each. Order is slow to fast because that is the order the numbers get
+# better, which makes a row readable left to right.
+CORNERS = ("slow", "typ", "fast")
+
+KEEP += ["40_setup_%s.rpt" % t for t in CORNERS]
+KEEP += ["41_hold_%s.rpt" % t for t in CORNERS]
 
 # Column order in qor.csv. Adding a field here is safe: older rows read back
 # with empty strings for it.
+#
+# The unsuffixed wns_setup/wns_hold columns are the SIGNOFF numbers, taken from
+# the views the design was actually optimised against. The per-corner columns
+# beside them are reporting only. They are not redundant: on an mmmc run
+# wns_setup and wns_setup_slow agree, and on runs 00 through 03 they do not,
+# because those were signed off at typical and the slow column is the penalty
+# they were never judged by.
 FIELDS = [
     "run", "note", "clk_ns", "date",
     "wns_place", "wns_cts", "wns_hold_cts", "wns_setup", "wns_hold",
@@ -46,6 +62,24 @@ FIELDS = [
     "logic_um2", "core_um2", "density_pct",
     "wire_um", "wns_place_start",
 ]
+
+for _t in CORNERS:
+    FIELDS += ["wns_setup_%s" % _t, "tns_setup_%s" % _t, "n_setup_viol_%s" % _t,
+               "wns_hold_%s" % _t, "n_hold_viol_%s" % _t]
+
+
+def corner_view(tag):
+    """The Innovus analysis view name behind a corner tag."""
+    return "RPT_" + tag.upper()
+
+
+# Where each kind of summary lives. The corner census is written by timeDesign
+# into its own directory precisely because it would otherwise land on the
+# filename route_opt_design already used, and the two are NOT the same
+# measurement: the signoff one is SI-aware and the plain timeDesign one is not.
+# On run 06 that difference is 45 violating paths against 28.
+SIGNOFF_DIR = "timingReports"
+CORNER_DIR = "cornerReports"
 
 
 # ---------------------------------------------------------------------------
@@ -108,23 +142,37 @@ def parse_postroute_summary(path):
     silently returned nothing at all: parse_run passes run_dir/"reports", and
     archive_reports writes to results/, so the file was never where it looked.
     """
-    d = {}
     run_dir = Path(path)
 
     text = _read(run_dir / "reports" / "50_postroute_summary.rpt")
 
     if text is None:
         # A live run: take the setup summary, never the _hold one beside it.
-        for gz in sorted(run_dir.glob("timingReports/*postRoute*.summary.gz")):
+        for gz in sorted(run_dir.glob(SIGNOFF_DIR + "/*postRoute*.summary.gz")):
             if "_hold" in gz.name:
                 continue
-            try:
-                with gzip.open(str(gz), "rt", errors="replace") as fh:
-                    text = fh.read()
-            except (OSError, EOFError):
-                text = None
+            text = _read_gz(gz)
             break
 
+    return _summary_numbers(text)
+
+
+def _read_gz(path):
+    try:
+        with gzip.open(str(path), "rt", errors="replace") as fh:
+            return fh.read()
+    except (OSError, EOFError):
+        return None
+
+
+def _summary_numbers(text):
+    """
+    WNS, TNS and the violating count out of a timeDesign summary table.
+
+    Only the "all" column is taken. Per-group numbers are worth reading in the
+    file itself and are not worth a column each in a table this wide.
+    """
+    d = {}
     if text is None:
         return d
     for key, label in (("tns", r"TNS \(ns\):"), ("viol", r"Violating Paths:"),
@@ -133,6 +181,64 @@ def parse_postroute_summary(path):
         if m:
             d[key] = float(m.group(1))
     return d
+
+
+def parse_view_blocks(text):
+    """
+    The per-view blocks of a `timeDesign -expandedViews` summary.
+
+    -expandedViews does NOT write one file per view, which is what this was
+    first built to expect. It writes ONE summary whose merged table is followed
+    by a four-line block per active view, and only the first line of each block
+    carries the view name:
+
+        |RPT_SLOW            | -0.066  | -0.066  |  0.645  |
+        |                    | -0.550  | -0.550  |  0.000  |
+        |                    |   28    |   28    |    0    |
+        |                    |  3497   |  3299   |   230   |
+
+    The rows are WNS, TNS, violating paths, total paths, in that order, and the
+    first data column is "all". Returns {'RPT_SLOW': {'wns':..}, ...}.
+    """
+    out = {}
+    if not text:
+        return out
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        m = re.match(r"^\|(RPT_\w+)\s*\|", line)
+        if not m:
+            continue
+        block = {}
+        for key, row in zip(("wns", "tns", "viol", "paths"), lines[i:i + 4]):
+            cols = row.split("|")
+            if len(cols) > 2:
+                try:
+                    block[key] = float(cols[2].strip())
+                except ValueError:
+                    pass
+        out[m.group(1)] = block
+    return out
+
+
+def parse_corner_census(run_dir, hold=False):
+    """
+    Every corner's post-route census, keyed by view name.
+
+    Two shapes as usual. An archived run has it ungzipped at
+    reports/52_corner_summary.rpt; a live run has it gzipped in cornerReports/.
+    """
+    run_dir = Path(run_dir)
+    stem = "53_corner_hold_summary.rpt" if hold else "52_corner_summary.rpt"
+    text = _read(run_dir / "reports" / stem)
+
+    if text is None:
+        for gz in sorted(run_dir.glob(CORNER_DIR + "/*postRoute*.summary.gz")):
+            if ("_hold" in gz.name) != hold:
+                continue
+            text = _read_gz(gz)
+            break
+
+    return parse_view_blocks(text)
 
 
 def _gen_date(path):
@@ -312,6 +418,34 @@ def parse_run(run_dir):
     if "tns" in summ:
         row["tns_setup"] = summ["tns"]
 
+    # Per-corner reporting. Absent on every run archived before 10 Aug 2026,
+    # which is why each column falls back to "" rather than to the signoff
+    # number: a slow-corner column silently filled with a typical-corner value
+    # is the exact confusion this table was changed to end.
+    census_setup = parse_corner_census(run_dir)
+    census_hold = parse_corner_census(run_dir, hold=True)
+
+    for tag in CORNERS:
+        setup = census_setup.get(corner_view(tag), {})
+        hold = census_hold.get(corner_view(tag), {})
+
+        # report_timing first, then let the census overwrite it. Both are the
+        # worst path in the same view, so they agree when both exist; the
+        # census is preferred because it is also where the counts come from.
+        row["wns_setup_" + tag] = _first_slack(rpt / ("40_setup_%s.rpt" % tag))
+        row["wns_hold_" + tag] = _first_slack(rpt / ("41_hold_%s.rpt" % tag))
+
+        if "wns" in setup:
+            row["wns_setup_" + tag] = setup["wns"]
+        if "tns" in setup:
+            row["tns_setup_" + tag] = setup["tns"]
+        if "viol" in setup:
+            row["n_setup_viol_" + tag] = int(setup["viol"])
+        if "wns" in hold:
+            row["wns_hold_" + tag] = hold["wns"]
+        if "viol" in hold:
+            row["n_hold_viol_" + tag] = int(hold["viol"])
+
     row.update({k: v for k, v in parse_summary(rpt / "44_summary.rpt").items()})
 
     row["wns_place_start"] = parse_flow_qor(run_dir)
@@ -381,6 +515,71 @@ def _one_line(note):
     return " ".join((note or "").replace("|", "/").split())
 
 
+def _corner_section(rows):
+    """
+    The same design judged at all three corners, three rows per run.
+
+    THE POINT OF THIS TABLE. 2.8 ns closing at +0.002 and the same design
+    missing by -0.968 are not two results, they are one result and its
+    qualifier, and for a while they lived in two different runs and had to be
+    joined by hand. Every run now reports all three, so the qualifier travels
+    with the number.
+    """
+    labels = {"slow": "slow  SS 0.95V 125C",
+              "typ": "typ   TT 1.10V  25C",
+              "fast": "fast  FF 1.25V   0C"}
+
+    body = (
+        "## By corner\n\n"
+        "Every run reports all three corners from the same routed database.\n"
+        "**Setup is signed off at slow and hold at fast**; the other cells are\n"
+        "reporting only and exist so that a number can never be quoted without\n"
+        "the corner it came from.\n\n"
+        "**A run with no rows here could not be re-judged.** `--from report`\n"
+        "back-fills any run whose database was built under MMMC. Runs saved\n"
+        "before MMMC existed have no `Cmin` rc corner and carry a typical\n"
+        "library that conflicts with the slow and fast ones, so the corner\n"
+        "views cannot be built on them at all and the flow refuses rather than\n"
+        "report the two that happen to work. `04-mmmc-analysis` is that\n"
+        "experiment done properly: it re-judged the `03-ring-fix` netlist at\n"
+        "real corners from synthesis. Read it as run 03's slow-corner result.\n\n"
+        "These come from a `timeDesign` **re-analysis** of the routed database,\n"
+        "archived as `52_corner_summary.rpt`. The main table above comes from\n"
+        "`route_opt_design`'s own final SI summary and is the signoff number.\n"
+        "**The two agree on WNS and disagree on TNS and the violation count**:\n"
+        "run 06 signs off at -1.344 ns over 45 paths and re-analyses to -0.550\n"
+        "over 28. Enabling SI-aware delay calculation does not close the gap.\n"
+        "All three corners here are measured identically, so compare a corner\n"
+        "column against a corner column and never against the table above.\n\n"
+        "| Run | Clk | Corner | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol |\n"
+        "|---|---:|---|---:|---:|---:|---:|---:|\n"
+    )
+
+    any_rows = False
+    for r in rows:
+        if not any(r.get("wns_setup_" + t) not in ("", None) for t in CORNERS):
+            continue
+        any_rows = True
+        for i, tag in enumerate(CORNERS):
+            body += "| {run} | {clk} | `{corner}` | {ws} | {ts} | {ns} | {wh} | {nh} |\n".format(
+                # The run name and clock on the first of its three rows only,
+                # so the eye groups them without a rule between blocks.
+                run=("`%s`" % r.get("run", "?")) if i == 0 else "",
+                clk=_fmt(r.get("clk_ns"), 2) if i == 0 else "",
+                corner=labels[tag],
+                ws=_fmt(r.get("wns_setup_" + tag)),
+                ts=_fmt(r.get("tns_setup_" + tag), 1),
+                ns=_viol(r.get("n_setup_viol_" + tag)),
+                wh=_fmt(r.get("wns_hold_" + tag)),
+                nh=_viol(r.get("n_hold_viol_" + tag)),
+            )
+
+    if not any_rows:
+        body += "| - | - | - | - | - | - | - | - |\n"
+
+    return body + "\n"
+
+
 def write_markdown(rows, md_path):
     """
     The iteration table. One row per run, newest last, so the trend reads
@@ -430,6 +629,7 @@ def write_markdown(rows, md_path):
         "otherwise. A negative setup WNS means the run did not make timing at\n"
         "that clock. Frozen reports for every run are in `results/<run>/reports/`.\n\n"
         + head + "\n".join(lines) + "\n\n"
+        + _corner_section(rows) +
         "## Stage progression\n\n"
         "Where the slack went between stages, which is how you tell whether a\n"
         "problem is in synthesis, in placement, in the clock tree or in the routing.\n\n"
@@ -507,16 +707,25 @@ def archive_reports(run_dir, results_dir):
     # Innovus writes these gzipped into timingReports/, so they are ungzipped
     # on the way out. A .gz in the repo is a file nobody opens on GitHub, and
     # these are two or three kilobytes of text.
-    for gz in sorted(run_dir.glob("timingReports/*postRoute*.summary.gz")):
-        stem = "50_postroute_summary.rpt"
-        if "_hold" in gz.name:
-            stem = "51_postroute_hold_summary.rpt"
-        try:
-            with gzip.open(str(gz), "rt", errors="replace") as fh:
-                (dest / stem).write_text(fh.read())
+    for gz in sorted(run_dir.glob(SIGNOFF_DIR + "/*postRoute*.summary.gz")):
+        stem = ("51_postroute_hold_summary.rpt" if "_hold" in gz.name
+                else "50_postroute_summary.rpt")
+        text = _read_gz(gz)
+        if text is not None:
+            (dest / stem).write_text(text)
             n += 1
-        except (OSError, EOFError):
-            pass
+
+    # The corner census, from its own directory and under its own names. 50 and
+    # 51 are the SI-aware signoff summaries route_opt_design wrote and are not
+    # this measurement; keeping them apart is the whole reason cornerReports
+    # exists. See the note on SIGNOFF_DIR.
+    for gz in sorted(run_dir.glob(CORNER_DIR + "/*postRoute*.summary.gz")):
+        stem = ("53_corner_hold_summary.rpt" if "_hold" in gz.name
+                else "52_corner_summary.rpt")
+        text = _read_gz(gz)
+        if text is not None:
+            (dest / stem).write_text(text)
+            n += 1
 
     # The elaborated SDC, beside the reports rather than under reports/.
     #
@@ -579,6 +788,14 @@ def main():
         print(f"clock        {_fmt(row['clk_ns'], 2)} ns")
         print(f"setup WNS    {_fmt(row['wns_setup'])} ns   ({row['n_setup_viol']} violated)")
         print(f"hold  WNS    {_fmt(row['wns_hold'])} ns   ({row['n_hold_viol']} violated)")
+        for tag in CORNERS:
+            if row["wns_setup_" + tag] == "":
+                continue
+            print("  {:<5} setup {:>8} ns  ({} violated)   hold {:>8} ns".format(
+                tag, _fmt(row["wns_setup_" + tag]), _viol(row["n_setup_viol_" + tag]),
+                _fmt(row["wns_hold_" + tag])))
+        if all(row["wns_setup_" + t] == "" for t in CORNERS):
+            print("  (no per-corner reports; see reports/49_corner_status.rpt)")
         print(f"cells        {_int(row['cells'])} + {_int(row['fillers'])} fillers")
         print(f"density      {_fmt(row['density_pct'], 1)}%")
         print(f"archived     {n} reports -> {dest}")

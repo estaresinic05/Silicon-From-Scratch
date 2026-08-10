@@ -390,6 +390,264 @@ if {[file exists $GDS_IN]} {
     puts "### GDSII skipped: no stream file at $GDS_IN"
 }
 
+#--------------------------------------------------------------------------
+# 10. Per-corner timing reports
+#
+# EVERY RUN REPORTS ALL THREE CORNERS, so a typical number and a slow number
+# come out of the same run and can never be quoted apart again. Implementation
+# above is untouched: the optimiser still targeted WC_VIEW for setup and
+# BC_VIEW for hold, and everything below happens after the design is final and
+# saved. Adding a view here cannot change what was built.
+#
+# THE VIEWS BELOW ARE NEW NAMES ON PURPOSE. Reusing WC_VIEW would be silently
+# wrong on a restored run 00 through 03, where that name exists and is bound to
+# the TYPICAL library: the report would carry a slow label over typical numbers,
+# which is the worst outcome available. RPT_* are created here, bound here, and
+# mean the same thing in every run.
+#
+# This also works on a database restored with --from report, which is what lets
+# runs 00 through 06 be re-reported at three corners without re-routing any of
+# them. On the early runs that is exactly the experiment run 04 was: the corner
+# penalty measured against a netlist that was built without it.
+#--------------------------------------------------------------------------
+# TWO THINGS HERE WERE LEARNED THE EXPENSIVE WAY, on the first real run.
+#
+# 1. NO create_rc_corner. Cmax and Cmin already exist, and re-creating an RC
+#    corner that is already there DELETES THE PARASITIC DATA for every corner:
+#
+#      IMPEXT-3508: The corner setup has changed in the MMMC flow ... the
+#      parasitic data in the tool from the previous setup is deleted.
+#
+#    An extracted, routed design silently became an unextracted one. The typ
+#    view therefore reuses Cmax rather than getting an RC corner of its own,
+#    which is also what runs 00 through 03 did: their delay corner was the
+#    typical library on Cmax. So the typ column is directly comparable to the
+#    historical typical numbers, which is the entire reason it exists.
+#
+# 2. THE TYPICAL LIBRARY HAS TO COME FROM THE SAME PLACE AS SLOW AND FAST.
+#    Mixing them gives four of these:
+#
+#      TECHLIB-1371: The 'output' pin 'Y' defined for cell 'LOGIC0_X1' in
+#      library 'NangateOpenCellLibrary' is either not defined or defined with
+#      different direction in the cell 'LOGIC0_X1' in library
+#      'NangateOpenCellLibrary_slow'.
+#
+#    The two tie cells, LOGIC0_X1 and LOGIC1_X1, have output pin Y in the
+#    MacroPlacement typical library and output pin Z in the OpenROAD slow and
+#    fast ones. Same library, two vintages, 501 bytes apart, and the design
+#    does not even instantiate them because globalNetConnect ties to the rails
+#    directly. Innovus validates the library sets against each other regardless
+#    of what the design uses.
+#
+#    NangateOpenCellLibrary_typical_openroad.lib is OpenROAD's Nangate45_typ.lib,
+#    which matches the slow and fast files already in use. The MacroPlacement
+#    typical is left alone: it is what TIMING_MODE=typ and the LEC dofile read,
+#    and overwriting it would stop runs 00 through 03 reproducing.
+set CORNER_STATUS {}
+set SETUP_VIEWS {}
+set CORNER_VIEWS {}
+set DROPPED 0
+
+# NOT wrapped silently. The rule from the DRC work holds: wrap an optional step
+# so it cannot destroy a route, but never let a MEASUREMENT fail quietly. The
+# status lands in an archived file as well as on the terminal, so a run whose
+# corner reports did not happen says so in its own evidence rather than just
+# in a log nobody opens.
+#
+# ONE STEP PER CATCH, and errorInfo as well as the message. An early version
+# recorded "FAILED activating views: 0", which named neither the command nor
+# the reason and cost a log dig to resolve. A diagnostic that does not say
+# which of several commands failed is barely better than no diagnostic.
+#
+# DEFINED BEFORE THE LOOP THAT USES IT. It was first written just above its
+# other caller, further down, which left the loop below calling a proc that did
+# not exist yet. Tcl reports that as `expected boolean value but got ""`, from
+# the `if` around the call rather than from the call itself, which points at
+# the wrong line entirely.
+proc corner_step {label script} {
+    global CORNER_STATUS
+    if {[catch {uplevel 1 $script} msg]} {
+        set detail [lindex [split $::errorInfo "\n"] 0]
+        # Innovus often raises with NOTHING in the Tcl error and prints the
+        # real reason to the log instead. Seen twice: msg='0' from an
+        # activation failure, and msg='' from create_delay_corner while the
+        # log carried "TCLCMD-994 ... 'Cmin'". An empty message is itself
+        # information, so say where the reason actually went.
+        if {[string trim $msg] eq ""} {
+            set msg "(empty)"
+            set detail "Innovus wrote the reason to the log, not to Tcl. Grep the newest innovus.log* for ERROR near this command."
+        }
+        lappend CORNER_STATUS "$label FAILED msg='$msg' detail='$detail'"
+        puts "### corner step '$label' FAILED: $msg | $detail"
+        return 0
+    }
+    lappend CORNER_STATUS "$label OK"
+    return 1
+}
+
+foreach {tag lib rc} [list \
+    slow NangateOpenCellLibrary_slow.lib             Cmax \
+    typ  NangateOpenCellLibrary_typical_openroad.lib Cmax \
+    fast NangateOpenCellLibrary_fast.lib             Cmin \
+] {
+    if {![file exists $NG45/lib/$lib]} {
+        lappend CORNER_STATUS "$tag SKIPPED no $lib"
+        continue
+    }
+    set view RPT_[string toupper $tag]
+
+    # NO BARE catch HERE. These were swallowed once and it cost a debugging
+    # round: on runs 00 through 03 the fast corner could not be built at all,
+    # every create failed quietly, and the only symptom was
+    # `activate FAILED msg='{}'` several steps later, an empty message from a
+    # command handed a view name that had never existed.
+    #
+    # A restored database never already contains these objects. 05_routed is
+    # saved long before this section runs, so a create that fails here is
+    # always a real failure and always worth recording.
+    set ok 1
+    foreach {label cmd} [list \
+        libset "create_library_set  -name LS_$tag -timing [list $NG45/lib/$lib]" \
+        corner "create_delay_corner -name DC_$tag -library_set LS_$tag -rc_corner $rc" \
+        view   "create_analysis_view -name $view -constraint_mode CON -delay_corner DC_$tag" \
+    ] {
+        if {![corner_step ${tag}_$label $cmd]} { set ok 0 ; break }
+    }
+
+    if {$ok} {
+        lappend SETUP_VIEWS $view
+        lappend CORNER_VIEWS $tag $view
+    } else {
+        lappend CORNER_STATUS "$tag DROPPED, $view was not built"
+        incr DROPPED
+    }
+}
+
+# A DROPPED VIEW AND A SKIPPED ONE ARE NOT THE SAME SITUATION.
+#
+# Skipped means a library FILE is not installed, and two corners out of three
+# is then the honest best available: that is the stock-enablement case.
+#
+# Dropped means the library was there and the DATABASE would not take it. That
+# is runs 00 through 03, built before MMMC existed: their saved sessions have
+# no Cmin rc corner, so the fast view cannot be built at all
+#
+#   TCLCMD-994: Can not find 'rc corner' object with the name 'Cmin'.
+#
+# and they carry the MacroPlacement typical library, whose tie cells use pin Y
+# where the OpenROAD slow and fast use Z, which throws TECHLIB-1371 four times
+# without stopping anything. Reporting the two corners that did build would put
+# numbers in the table that rest on a library conflict, and a partial row that
+# does not announce itself is worse than an absent one.
+#
+# Neither is fixable from a restored session and neither needs to be. RUN 04 IS
+# THIS EXPERIMENT DONE PROPERLY: it re-judged the run-03 netlist at real corners
+# from synthesis, which is the measurement a back-fill of run 03 would approximate.
+if {$DROPPED > 0} {
+    lappend CORNER_STATUS "NOT RUN: $DROPPED view(s) could not be built on this database"
+    lappend CORNER_STATUS "HINT: a session saved before MMMC has no Cmin and an incompatible typical library. It cannot be re-judged. See run 04."
+    puts "### ####################################################"
+    puts "### THIS DATABASE PREDATES MMMC AND CANNOT BE RE-JUDGED."
+    puts "### Its own corner is still reported in 40_final_setup.rpt."
+    puts "### ####################################################"
+} elseif {[llength $SETUP_VIEWS] < 2} {
+    lappend CORNER_STATUS "NOT RUN: fewer than two corner libraries installed"
+} elseif {[corner_step activate {
+    # Every corner active for both checks. A view can be active for setup and
+    # hold at once, and reporting is the only thing left to do, so there is no
+    # reason to be selective here the way init_design had to be.
+    set_analysis_view -setup $SETUP_VIEWS -hold $SETUP_VIEWS
+}]} {
+    # extractRC is allowed to fail without taking the reports down with it.
+    # Now that no RC corner is recreated, the parasitics for Cmax and Cmin
+    # should survive activation, so the timing is very likely readable whether
+    # or not this succeeds. Killing the reports over it, which is what the
+    # first version did, threw away the whole point of the run.
+    # SI-aware delay calculation, set before extraction so that everything this
+    # section produces comes from one analysis mode.
+    #
+    # IT DOES NOT REPRODUCE THE SIGNOFF NUMBERS, and the note is here so nobody
+    # re-runs the experiment. route_opt_design's own summary is headed
+    # "optDesign Final SI Timing Summary" and reports 45 violating paths with
+    # -1.344 ns of TNS on run 06. Re-analysing the identical restored database
+    # gives 28 and -0.550. Three things were tried: plain timeDesign,
+    # `timeDesign -si` which is obsolete in 23.1 and silently does nothing, and
+    # this mode set both after and before extractRC. All three give 28.
+    #
+    # WNS is -0.066 in every one of them, which is the number a clock sweep
+    # turns on, so the gap was not worth a fourth run. What it means is that
+    # THE CENSUS IS A RE-ANALYSIS AND NOT THE SIGNOFF MEASUREMENT. The three
+    # corners are measured identically and so are comparable with each other;
+    # they are not comparable with the main QOR table's TNS and violation
+    # count, which come from the optimiser's own final analysis.
+    corner_step si_mode {setDelayCalMode -engine default -siAware true}
+    corner_step extract {extractRC}
+
+    foreach {tag view} $CORNER_VIEWS {
+        # -max_paths 50 caps the path DETAIL here exactly as it does in
+        # 40_final_setup.rpt. The true violation counts come from the
+        # timeDesign summaries below and from nowhere else.
+        corner_step report_$tag \
+            "report_timing -late  -view $view -max_paths 50 -nworst 1 > reports/40_setup_${tag}.rpt
+             report_timing -early -view $view -max_paths 50 -nworst 1 > reports/41_hold_${tag}.rpt"
+    }
+
+    # -expandedViews adds a block per active view to the summary, under the
+    # merged worst-of-all table at the top: WNS, TNS, violating paths and total
+    # paths, per corner. WNS alone cannot tell one failing endpoint from four
+    # hundred, and per corner it cannot tell one corner's shape from another's.
+    #
+    # -outDir cornerReports, NOT timingReports. THIS IS LOAD BEARING.
+    # timeDesign writes <design>_postRoute.summary.gz, which is the exact
+    # filename route_opt_design already wrote there at the end of the route.
+    # Writing into the same directory overwrote the signoff summary with this
+    # one, and qor.py then archived the replacement over the committed
+    # evidence: run 06's TNS went from -1.344 to -0.550 and its violation
+    # count from 45 to 28 without a word. A separate directory makes the
+    # collision impossible rather than merely unlikely.
+    #
+    # `timeDesign -postRoute -si` looks like the way to ask for a crosstalk
+    # aware analysis. Innovus 23.1 answers:
+    #
+    #   IMPOPT-7017: The command 'timeDesign -postRoute -si [-hold |
+    #   -reportOnly]' is obsolete ... ensure that 'setDelayCalMode -engine
+    #   default -siAware true' is set & use 'timeDesign -postRoute'.
+    #
+    # It WARNED, DID NOTHING, AND RETURNED SUCCESS. No analysis ran, no summary
+    # was written, and corner_step recorded OK because the command had not
+    # errored. Hence the artifact check below: a step is done when its evidence
+    # exists on disk, not when its return code is zero.
+    corner_step census_setup {timeDesign -postRoute       -expandedViews -outDir cornerReports}
+    corner_step census_hold  {timeDesign -postRoute -hold -expandedViews -outDir cornerReports}
+
+    # DID IT ACTUALLY WRITE ANYTHING. The whole per-corner census is these two
+    # files; without them the table shows a dash and nobody can tell a corner
+    # that was clean from a corner that was never measured.
+    set wrote [glob -nocomplain cornerReports/*.summary.gz]
+    if {[llength $wrote] == 0} {
+        lappend CORNER_STATUS "census WROTE NOTHING to cornerReports/"
+        puts "### ####################################################"
+        puts "### THE CORNER CENSUS PRODUCED NO SUMMARY FILE."
+        puts "### Per-corner WNS is still in reports/40_setup_*.rpt;"
+        puts "### TNS and the violation counts are missing."
+        puts "### ####################################################"
+    } else {
+        lappend CORNER_STATUS "census wrote [llength $wrote] file(s): [lsort $wrote]"
+    }
+} else {
+    puts "### ####################################################"
+    puts "### PER-CORNER REPORTING DID NOT RUN."
+    puts "### The signoff reports 40/41/50 above are unaffected."
+    puts "### ####################################################"
+}
+
+set fh [open reports/49_corner_status.rpt w]
+puts $fh "Per-corner reporting status"
+puts $fh "views requested: $SETUP_VIEWS"
+foreach line $CORNER_STATUS { puts $fh $line }
+close $fh
+puts "### corner status: $CORNER_STATUS"
+
 puts "=========================================================="
 puts " PLACE AND ROUTE DONE"
 puts "   database : enc/06_final.enc"

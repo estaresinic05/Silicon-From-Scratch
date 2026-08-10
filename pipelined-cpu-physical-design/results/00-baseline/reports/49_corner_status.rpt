@@ -1,0 +1,13 @@
+Per-corner reporting status
+views requested: RPT_SLOW RPT_TYP
+slow_libset OK
+slow_corner OK
+slow_view OK
+typ_libset OK
+typ_corner OK
+typ_view OK
+fast_libset OK
+fast_corner FAILED msg='' detail=''
+fast DROPPED, RPT_FAST was not built
+NOT RUN: 1 view(s) could not be built on this database
+HINT: a session saved before MMMC has no Cmin and an incompatible typical library. It cannot be re-judged. See run 04.

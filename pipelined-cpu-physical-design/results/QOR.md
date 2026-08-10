@@ -9,13 +9,50 @@ that clock. Frozen reports for every run are in `results/<run>/reports/`.
 
 | Run | Clk | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `06-clk3p9` | 3.90 | -0.066 | -1.3 | 45 | 0.011 | 0 | 8,148 | 82.7% | 93,039 | three-corner re-report |
+| `04-mmmc-analysis` | 2.80 | -0.968 | -82.8 | 362 | -0.155 | 50 | 6,752 | 85.1% | 84,689 | three-corner re-report |
+| `05-mmmc-full` | 2.80 | -1.060 | -89.2 | 541 | -0.083 | 14 | 7,305 | 78.3% | 85,240 | three-corner re-report |
 | `00-baseline` | 3.00 | 0.009 | - | 0 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
 | `01-split-uncertainty` | 3.00 | 0.009 | - | 0 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
 | `02-clk2p8` | 2.80 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
 | `03-ring-fix` | 2.80 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | ring spacing 1.5um, clears the four MetSpc violations |
-| `04-mmmc-analysis` | 2.80 | -0.968 | -82.8 | 362 | -0.155 | 50 | 6,752 | 85.1% | 84,689 | corner penalty only, run 03 netlist, not reproducible from HEAD |
-| `05-mmmc-full` | 2.80 | -1.060 | -89.2 | 541 | -0.083 | 14 | 7,305 | 78.3% | 85,240 | synthesised at slow, judged at slow/fast |
-| `06-clk3p9` | 3.90 | -0.066 | -1.3 | 45 | 0.011 | 0 | 8,148 | 82.7% | 93,039 | 3.9 ns at slow; misses by 66 ps, hold clean |
+
+## By corner
+
+Every run reports all three corners from the same routed database.
+**Setup is signed off at slow and hold at fast**; the other cells are
+reporting only and exist so that a number can never be quoted without
+the corner it came from.
+
+**A run with no rows here could not be re-judged.** `--from report`
+back-fills any run whose database was built under MMMC. Runs saved
+before MMMC existed have no `Cmin` rc corner and carry a typical
+library that conflicts with the slow and fast ones, so the corner
+views cannot be built on them at all and the flow refuses rather than
+report the two that happen to work. `04-mmmc-analysis` is that
+experiment done properly: it re-judged the `03-ring-fix` netlist at
+real corners from synthesis. Read it as run 03's slow-corner result.
+
+These come from a `timeDesign` **re-analysis** of the routed database,
+archived as `52_corner_summary.rpt`. The main table above comes from
+`route_opt_design`'s own final SI summary and is the signoff number.
+**The two agree on WNS and disagree on TNS and the violation count**:
+run 06 signs off at -1.344 ns over 45 paths and re-analyses to -0.550
+over 28. Enabling SI-aware delay calculation does not close the gap.
+All three corners here are measured identically, so compare a corner
+column against a corner column and never against the table above.
+
+| Run | Clk | Corner | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol |
+|---|---:|---|---:|---:|---:|---:|---:|
+| `06-clk3p9` | 3.90 | `slow  SS 0.95V 125C` | -0.066 | -0.6 | 28 | 0.162 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 1.256 | 0.0 | 0 | 0.037 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 1.480 | 0.0 | 0 | 0.011 | 0 |
+| `04-mmmc-analysis` | 2.80 | `slow  SS 0.95V 125C` | -0.968 | -92.3 | 469 | -0.700 | 108 |
+|  |  | `typ   TT 1.10V  25C` | 0.700 | 0.0 | 0 | -0.218 | 71 |
+|  |  | `fast  FF 1.25V   0C` | 0.931 | 0.0 | 0 | -0.155 | 108 |
+| `05-mmmc-full` | 2.80 | `slow  SS 0.95V 125C` | -1.060 | -87.6 | 515 | -0.251 | 13 |
+|  |  | `typ   TT 1.10V  25C` | 0.692 | 0.0 | 0 | -0.089 | 9 |
+|  |  | `fast  FF 1.25V   0C` | 0.923 | 0.0 | 0 | -0.083 | 14 |
 
 ## Stage progression
 
@@ -24,10 +61,10 @@ problem is in synthesis, in placement, in the clock tree or in the routing.
 
 | Run | Placed | After CTS | Post-route | CTS cost | Route cost |
 |---|---:|---:|---:|---:|---:|
+| `06-clk3p9` | -0.115 | -0.055 | -0.066 | -0.060 | 0.011 |
+| `04-mmmc-analysis` | -1.356 | -0.953 | -0.968 | -0.403 | 0.015 |
+| `05-mmmc-full` | -1.204 | -1.060 | -1.060 | -0.144 | 0.000 |
 | `00-baseline` | 0.019 | 0.018 | 0.009 | 0.001 | 0.009 |
 | `01-split-uncertainty` | 0.019 | 0.018 | 0.009 | 0.001 | 0.009 |
 | `02-clk2p8` | 0.001 | 0.000 | 0.002 | 0.001 | -0.002 |
 | `03-ring-fix` | 0.001 | 0.000 | 0.002 | 0.001 | -0.002 |
-| `04-mmmc-analysis` | -1.356 | -0.953 | -0.968 | -0.403 | 0.015 |
-| `05-mmmc-full` | -1.204 | -1.060 | -1.060 | -0.144 | 0.000 |
-| `06-clk3p9` | -0.115 | -0.055 | -0.066 | -0.060 | 0.011 |

@@ -131,11 +131,37 @@ python3 scripts/qor.py table
 `docs/pnr-report.pdf` is the written form of one run, with the floorplan, the
 power grid, the clock tree and the timing walked through in full.
 
+### Every run reports all three corners
+
+`QOR.md` carries a **By corner** table beside the main one. The design is
+optimised against slow for setup and fast for hold exactly as before, and then
+the report stage activates a typical view as well and re-reports from the same
+routed database. Nothing about what was built changes; what changes is that a
+typical number and a slow number now come out of the same run.
+
+That matters because they are not close. On this design 2.8 ns closes at
+**+0.002 at typical and misses by −0.968 at slow**, and for a while those two
+facts lived in two different runs and had to be joined by hand. A slack quoted
+without its corner is not a result.
+
+Corner reporting also works on a database that is already routed:
+
+```
+./run.sh --name 03-ring-fix --from report      # re-report, no re-route
+```
+
+If a corner library is missing the run says so in
+`reports/49_corner_status.rpt` rather than quietly reporting fewer corners.
+`slow` and `fast` are not in the stock MacroPlacement enablement and come from
+The-OpenROAD-Project/OpenROAD `test/Nangate45`.
+
 ---
 
 **`runs/<name>/reports/40_final_setup.rpt` is the result.** The worst path slack in
 that file is post-route timing with extracted parasitics, and it is the only
 timing number worth quoting. Everything before it is an estimate.
+`40_setup_slow.rpt`, `40_setup_typ.rpt` and `40_setup_fast.rpt` beside it are
+the same check at each corner; the signoff one is slow.
 
 ---
 

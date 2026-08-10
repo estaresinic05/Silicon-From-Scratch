@@ -6,10 +6,18 @@
 #   ./run.sh --period 2.5 --note "tighten"   full flow at 2.5 ns
 #   ./run.sh --name baseline --note "..."    name the run yourself
 #   ./run.sh --name baseline --from cts      resume an existing run at CTS
+#   ./run.sh --name baseline --from report   re-report a routed run, no re-route
 #   ./run.sh --timing typ                    single typical corner, runs 00-03
 #   ./run.sh lec <run>                       formal equivalence, RTL vs netlist
+#   ./run.sh libs                            fetch the slow/typ/fast libraries
 #   ./run.sh gds                             fetch the Nangate45 stream file
 #   ./run.sh table                           rebuild results/QOR.md
+#
+# EVERY RUN REPORTS ALL THREE CORNERS. Implementation still targets slow for
+# setup and fast for hold; the report stage adds a typical view and re-reports
+# from the same routed database, so a typical number and a slow number can
+# never again be quoted apart. --from report back-fills a run that is already
+# routed, without re-routing it.
 #
 # EVERY RUN GETS ITS OWN DIRECTORY under runs/, so a second experiment can
 # never destroy the first one's reports. That was the whole problem with
@@ -42,7 +50,10 @@ SYN_CORNER_ARG=""
 STAGES="syn floorplan power place cts route report"
 
 usage() {
-    sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
+    # The line range is the comment block at the top of this file. It moves
+    # whenever that block grows, and nothing catches it but reading the output,
+    # so `./run.sh --help` is worth an eye after editing the header.
+    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -71,6 +82,20 @@ preflight() {
                  lef/NangateOpenCellLibrary.macro.mod.lef \
                  qrc/NG45.tch; do
             [ -f "$NG45/$f" ] || { echo "MISSING: $NG45/$f"; fail=1; }
+        done
+
+        # A WARNING, NOT A FAILURE. The flow runs without these; it just runs
+        # with fewer corners, which is a real thing to want on a machine that
+        # has only the stock enablement. It is called out because the failure
+        # mode is otherwise silent: the corner table simply comes back empty
+        # for that corner and an empty column reads like a clean one.
+        for f in lib/NangateOpenCellLibrary_slow.lib \
+                 lib/NangateOpenCellLibrary_fast.lib \
+                 lib/NangateOpenCellLibrary_typical_openroad.lib; do
+            [ -f "$NG45/$f" ] || {
+                echo "NOTE: $NG45/$f is absent."
+                echo "      That corner will be skipped. Run './run.sh libs' to fetch it."
+            }
         done
     fi
 
@@ -235,6 +260,42 @@ EOF
     echo "Reports: runs/$name/reports/6*_lec_*.rpt"
 }
 
+# The three corner libraries, which the enablement does not ship.
+#
+# MacroPlacement gives you NangateOpenCellLibrary_typical.lib and nothing else.
+# slow and fast come from OpenROAD's test/Nangate45, and so must the typical
+# used for corner REPORTING: the MacroPlacement one is a different vintage of
+# the same library whose tie cells LOGIC0_X1 and LOGIC1_X1 carry output pin Y
+# where OpenROAD's carry Z. Mixing them throws TECHLIB-1371 four times and the
+# corner views cannot be built. The two files are 501 bytes apart and that is
+# the whole of the difference that matters.
+#
+# The MacroPlacement typical is deliberately left in place and untouched. It is
+# what --timing typ and the LEC dofile read, and it is what runs 00 through 03
+# were built with, so overwriting it would stop them reproducing.
+#
+# Downloads only what is missing, because a library that a run was built
+# against must never be silently replaced underneath its reports.
+get_libs() {
+    echo "=== fetching the Nangate45 corner libraries ======================"
+    local base=https://raw.githubusercontent.com/The-OpenROAD-Project/OpenROAD/master/test/Nangate45
+    mkdir -p "$NG45/lib"
+    local src dst
+    for pair in "Nangate45_slow.lib:NangateOpenCellLibrary_slow.lib" \
+                "Nangate45_fast.lib:NangateOpenCellLibrary_fast.lib" \
+                "Nangate45_typ.lib:NangateOpenCellLibrary_typical_openroad.lib"; do
+        src=${pair%%:*}
+        dst=${pair##*:}
+        if [ -f "$NG45/lib/$dst" ]; then
+            echo "  have $dst"
+        else
+            echo "  fetching $dst"
+            curl -fL -o "$NG45/lib/$dst" "$base/$src"
+        fi
+    done
+    ls -l "$NG45/lib/"NangateOpenCellLibrary_*.lib
+}
+
 get_gds() {
     echo "=== fetching Nangate45 stream file =============================="
     mkdir -p "$HOME/nangate45_gds"
@@ -248,6 +309,7 @@ get_gds() {
 #---------------------------------------------------------------------------
 case "${1:-}" in
     gds)   get_gds; exit 0 ;;
+    libs)  get_libs; exit 0 ;;
     table) python3 "$ROOT/scripts/qor.py" table --root "$ROOT"; exit 0 ;;
     lec)   [ -n "${2:-}" ] || { echo "usage: ./run.sh lec <run-name>"; exit 1; }
            run_lec "$2"; exit 0 ;;
