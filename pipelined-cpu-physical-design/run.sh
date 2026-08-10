@@ -586,15 +586,47 @@ run_gls() {
     # takes the simulator out of the list of variables instead of leaving it in.
     if [ -n "$XRUN" ]; then
         echo "    xrun     : $XRUN"
-        local sdfdef=""
+        # THE CELL MODELS MUST BE COMPILED IN THE MODE THE SDF WAS WRITTEN FOR.
+        # This is the whole ballgame for the timing tier.
+        #
+        # Innovus writes RECREM checks and negative-timing-check SETUPHOLDs:
+        # 1,350 and 2,694 of them in this design. The Nangate models only carry
+        # those inside `ifdef NTC / `ifdef RECREM. Compiled without them, over a
+        # thousand annotations bind to NOTHING:
+        #
+        #   *W,SDFNET: Unable to annotate to non-existent timing check
+        #              (RECREM (posedge RN) (posedge CK)) ... of DFFR_X1
+        #
+        # Some delays then land and others are dropped, and that inconsistent
+        # delay picture captures the wrong data with no violation to flag it.
+        # That is exactly how all three corners came back with 32 identical
+        # errors and zero timing-check messages, on a netlist that passes
+        # perfectly at zero delay.
+        #
+        # AND TETRAMAX HAS TO COME OFF for the SDF tier. It suppresses the
+        # ng_xbuf primitives, and in the NTC branch those drive the delayed
+        # reference signals the annotated checks are written against. The port
+        # coercion that made TETRAMAX necessary for iverilog is in the NON-NTC
+        # branch only: there ng_xbuf drives the RN input port, here it drives
+        # the internal RN_d.
+        #
+        # Zero delay keeps TETRAMAX and switches the checks off outright. With
+        # no delays, data changes in the same instant as the clock edge and
+        # every check would fire meaninglessly.
+        local sdfdef modedef checkarg
         if [ -n "$sdf" ]; then
             sdfdef="-define SDF_FILE=\"$sdf\""
-            echo "    simulator: xrun, timing checks ENFORCED"
+            modedef="-define NTC -define RECREM"
+            checkarg=""
+            echo "    simulator: xrun, SDF annotated, timing checks ENFORCED"
         else
-            echo "    simulator: xrun, zero delay"
+            sdfdef=""
+            modedef="-define TETRAMAX"
+            checkarg="-notimingchecks"
+            echo "    simulator: xrun, zero delay, timing checks off"
         fi
-        "$XRUN" -timescale 1ps/1ps -access +rwc -negdelay \
-             -define GATE_SIM -define TETRAMAX $sdfdef \
+        "$XRUN" -timescale 1ps/1ps -access +rwc -negdelay $checkarg \
+             -define GATE_SIM $modedef $sdfdef \
              -l "$log" \
              "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$netlist" "$cells" \
              $plus "$@"
