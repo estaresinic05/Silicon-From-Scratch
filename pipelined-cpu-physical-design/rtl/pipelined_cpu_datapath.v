@@ -196,7 +196,17 @@ module pipelined_cpu_datapath (
   // not built from standard cells and has no gate level view, so place and
   // route has nothing to place for one. Every real core is partitioned this
   // way, with the caches outside the core boundary.
-  assign imem_addr = IF_pc;  //word alignment was performed inside instruct_mem
+  // Bit 0 is tied off rather than left to be discovered. The PC resets to 0
+  // and moves by +4 or by a branch immediate whose bit 0 imm_gen sets to zero
+  // structurally, so IF_pc[0] is zero in every reachable state. Synthesis
+  // proves that and ties the pin off; the RTL should say it rather than rely
+  // on the tool noticing, and equivalence checking compares over ALL states
+  // rather than reachable ones, so without this the two disagree about a state
+  // the CPU can never be in.
+  //
+  // Bit 1 is NOT tied off, and must not be: B-type immediates are multiples of
+  // 2, not 4, so IF_pc[1] genuinely can be set.
+  assign imem_addr = {IF_pc[31:1], 1'b0};  //word alignment is completed inside instruct_mem
   assign IF_instr  = imem_rdata;
 
   /*================= ID stage =================*/
@@ -314,7 +324,7 @@ module pipelined_cpu_datapath (
   /*********************************/
 
   /*------- synthesis observability, see header -------*/
-  assign dbg_pc        = IF_pc;
+  assign dbg_pc        = {IF_pc[31:1], 1'b0};  // see imem_addr above
   assign dbg_wb_addr   = MEMWB_rd;
   assign dbg_wb_data   = MEMWB_dataToWrite;
   assign dbg_wb_enable = MEMWB_regWrite;
