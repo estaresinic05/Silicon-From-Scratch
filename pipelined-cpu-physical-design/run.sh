@@ -429,9 +429,44 @@ get_cells() {
 # Run programs/program.mem on the RTL core. This is the baseline the gate run
 # is compared against, and it uses the SAME testbench, so any difference
 # between the two is the netlist and not the harness.
+#
+# EITHER SIMULATOR, because the two machines have different ones. A Windows
+# laptop has iverilog and no Xcelium; nanoHUB has Xcelium and no iverilog.
+# This used to demand iverilog and exit, so the flow's own functional check
+# was the one thing that could not be run on the machine that runs the flow,
+# and checking an RTL change there meant not checking it at all.
+#
+# Xcelium is preferred when both exist, so that this agrees with run_gls about
+# which simulator is authoritative. There is no SDF and there are no cell
+# models on this path, so the two agree anyway; the preference only keeps the
+# RTL and gate answers from ever coming out of different tools.
 run_sim_rtl() {
-    command -v iverilog >/dev/null 2>&1 || { echo "MISSING: iverilog"; exit 1; }
     echo "=== RTL core simulation ========================================="
+
+    local XRUN
+    # || true, because find_xrun exits non-zero when there is no Xcelium
+    XRUN=$(find_xrun || true)
+
+    if [ -n "$XRUN" ]; then
+        echo "    simulator: $XRUN"
+        (cd "$ROOT" && "$XRUN" -timescale 1ps/1ps -access +rwc \
+            -l "$ROOT/sim/rtl.log" \
+            "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$ROOT"/rtl/*.v "$@")
+        return
+    fi
+
+    command -v iverilog >/dev/null 2>&1 || {
+        echo "MISSING: neither iverilog nor xrun is available."
+        echo "         iverilog is the usual one on a laptop. On nanoHUB,"
+        echo "         Xcelium is in /apps/cadencedigital/r21/bin and this"
+        echo "         script finds it itself once that tree is reachable."
+        exit 1; }
+
+    echo "    simulator: iverilog"
+    # DELETE THE BINARY BEFORE BUILDING IT, for the reason spelled out in
+    # run_gls: a failed compile leaves the previous one in place and vvp then
+    # runs it, giving a complete plausible result from the wrong design.
+    rm -f "$ROOT/sim/rtl.vvp"
     iverilog -g2012 -o "$ROOT/sim/rtl.vvp" \
         "$ROOT/sim/tb_cpu_core.v" "$ROOT/sim/mem_model.v" "$ROOT"/rtl/*.v || exit 1
     (cd "$ROOT" && vvp sim/rtl.vvp "$@")
