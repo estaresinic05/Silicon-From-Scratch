@@ -21,6 +21,7 @@ that clock. Frozen reports for every run are in `results/<run>/reports/`.
 | `fmax-clk4p1` | 4.10 | 0.70 | medium | -0.015 | -0.0 | 7 | 0.021 | 0 | 9,147 | 74.4% | 98,342 | fmax sweep at 0.70 util |
 | `fmax-clk4p3` | 4.30 | 0.70 | medium | -0.029 | -0.3 | 29 | 0.024 | 0 | 7,575 | 74.6% | 93,904 | fmax sweep at 0.70 util |
 | `07-rfreset` | 3.90 | 0.70 | medium | -0.039 | -0.3 | 30 | 0.021 | 0 | 8,497 | 78.9% | 106,281 | register file reset in RTL; slow WNS -0.066 to -0.039, viol 45 to 30 |
+| `clk4p1_ehigh` | 4.10 | 0.70 | high | -0.013 | -0.1 | 12 | 0.030 | 0 | 8,733 | 75.6% | 99,868 | high effort at the best sweep point |
 
 ## By corner
 
@@ -73,6 +74,9 @@ column against a corner column and never against the table above.
 | `07-rfreset` | 3.90 | `slow  SS 0.95V 125C` | -0.039 | -0.1 | 4 | 0.178 | 0 |
 |  |  | `typ   TT 1.10V  25C` | 1.257 | 0.0 | 0 | 0.048 | 0 |
 |  |  | `fast  FF 1.25V   0C` | 1.472 | 0.0 | 0 | 0.021 | 0 |
+| `clk4p1_ehigh` | 4.10 | `slow  SS 0.95V 125C` | -0.018 | -0.2 | 21 | 0.225 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 1.294 | 0.0 | 0 | 0.062 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 1.523 | 0.0 | 0 | 0.030 | 0 |
 
 ## Stage progression
 
@@ -93,3 +97,4 @@ problem is in synthesis, in placement, in the clock tree or in the routing.
 | `fmax-clk4p1` | -0.016 | 0.008 | -0.015 | -0.024 | 0.023 |
 | `fmax-clk4p3` | -0.009 | 0.000 | -0.029 | -0.009 | 0.029 |
 | `07-rfreset` | -0.059 | 0.002 | -0.039 | -0.061 | 0.041 |
+| `clk4p1_ehigh` | 0.003 | 0.002 | -0.013 | 0.001 | 0.015 |
