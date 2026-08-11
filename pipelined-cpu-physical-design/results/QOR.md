@@ -16,6 +16,10 @@ that clock. Frozen reports for every run are in `results/<run>/reports/`.
 | `01-split-uncertainty` | 3.00 | 0.70 | 0.009 | - | 0 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
 | `02-clk2p8` | 2.80 | 0.70 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
 | `03-ring-fix` | 2.80 | 0.70 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | ring spacing 1.5um, clears the four MetSpc violations |
+| `fmax-clk3p9` | 3.90 | 0.70 | -0.039 | -0.3 | 30 | 0.021 | 0 | 8,497 | 78.9% | 106,281 | fmax sweep at 0.70 util |
+| `fmax-clk4p0` | 4.00 | 0.70 | -0.045 | -1.4 | 63 | 0.027 | 0 | 9,592 | 76.9% | 106,596 | fmax sweep at 0.70 util |
+| `fmax-clk4p1` | 4.10 | 0.70 | -0.015 | -0.0 | 7 | 0.021 | 0 | 9,147 | 74.4% | 98,342 | fmax sweep at 0.70 util |
+| `fmax-clk4p3` | 4.30 | 0.70 | -0.029 | -0.3 | 29 | 0.024 | 0 | 7,575 | 74.6% | 93,904 | fmax sweep at 0.70 util |
 
 ## By corner
 
@@ -53,6 +57,18 @@ column against a corner column and never against the table above.
 | `05-mmmc-full` | 2.80 | `slow  SS 0.95V 125C` | -1.060 | -87.6 | 515 | -0.251 | 13 |
 |  |  | `typ   TT 1.10V  25C` | 0.692 | 0.0 | 0 | -0.089 | 9 |
 |  |  | `fast  FF 1.25V   0C` | 0.923 | 0.0 | 0 | -0.083 | 14 |
+| `fmax-clk3p9` | 3.90 | `slow  SS 0.95V 125C` | -0.039 | -0.1 | 4 | 0.178 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 1.257 | 0.0 | 0 | 0.048 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 1.472 | 0.0 | 0 | 0.021 | 0 |
+| `fmax-clk4p0` | 4.00 | `slow  SS 0.95V 125C` | -0.052 | -2.1 | 68 | 0.217 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 1.257 | 0.0 | 0 | 0.058 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 1.486 | 0.0 | 0 | 0.027 | 0 |
+| `fmax-clk4p1` | 4.10 | `slow  SS 0.95V 125C` | -0.015 | -0.0 | 2 | 0.219 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 1.315 | 0.0 | 0 | 0.052 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 1.543 | 0.0 | 0 | 0.021 | 0 |
+| `fmax-clk4p3` | 4.30 | `slow  SS 0.95V 125C` | -0.029 | -0.1 | 3 | 0.210 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 1.394 | 0.0 | 0 | 0.056 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 1.634 | 0.0 | 0 | 0.024 | 0 |
 
 ## Stage progression
 
@@ -68,3 +84,7 @@ problem is in synthesis, in placement, in the clock tree or in the routing.
 | `01-split-uncertainty` | 0.019 | 0.018 | 0.009 | 0.001 | 0.009 |
 | `02-clk2p8` | 0.001 | 0.000 | 0.002 | 0.001 | -0.002 |
 | `03-ring-fix` | 0.001 | 0.000 | 0.002 | 0.001 | -0.002 |
+| `fmax-clk3p9` | -0.059 | 0.002 | -0.039 | -0.061 | 0.041 |
+| `fmax-clk4p0` | -0.014 | -0.008 | -0.045 | -0.006 | 0.037 |
+| `fmax-clk4p1` | -0.016 | 0.008 | -0.015 | -0.024 | 0.023 |
+| `fmax-clk4p3` | -0.009 | 0.000 | -0.029 | -0.009 | 0.029 |
