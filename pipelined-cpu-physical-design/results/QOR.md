@@ -23,6 +23,10 @@ that clock. Frozen reports for every run are in `results/<run>/reports/`.
 | `07-rfreset` | 3.90 | 0.70 | medium | -0.039 | -0.3 | 30 | 0.021 | 0 | 8,497 | 78.9% | 106,281 | register file reset in RTL; slow WNS -0.066 to -0.039, viol 45 to 30 |
 | `clk4p1_ehigh` | 4.10 | 0.70 | high | -0.013 | -0.1 | 12 | 0.030 | 0 | 8,733 | 75.6% | 99,868 | high effort at the best sweep point |
 | `08-bypass` | 4.10 | 0.70 | high | -0.044 | -0.2 | 8 | 0.026 | 0 | 4,931 | 71.4% | 82,503 | RF write on posedge with write-forward bypass |
+| `util6-clk4p1` | 4.10 | 0.60 | medium | -0.012 | -0.1 | 14 | 0.026 | 0 | 5,170 | 61.4% | 80,701 | utilization sweep at 4.1 ns |
+| `util7-clk4p1` | 4.10 | 0.70 | medium | 0.003 | 0.0 | 0 | 0.016 | 0 | 5,197 | 71.7% | 85,001 | utilization sweep at 4.1 ns |
+| `util8-clk4p1` | 4.10 | 0.80 | medium | -0.041 | -0.5 | 26 | 0.018 | 0 | 5,217 | 81.9% | 81,279 | utilization sweep at 4.1 ns |
+| `util85-clk4p1` | 4.10 | 0.85 | medium | -0.040 | -0.1 | 9 | 0.019 | 0 | 5,193 | 87.0% | 83,555 | utilization sweep at 4.1 ns |
 
 ## By corner
 
@@ -81,6 +85,18 @@ column against a corner column and never against the table above.
 | `08-bypass` | 4.10 | `slow  SS 0.95V 125C` | -0.044 | -0.2 | 8 | 0.212 | 0 |
 |  |  | `typ   TT 1.10V  25C` | 2.160 | 0.0 | 0 | 0.056 | 0 |
 |  |  | `fast  FF 1.25V   0C` | 2.379 | 0.0 | 0 | 0.026 | 0 |
+| `util6-clk4p1` | 4.10 | `slow  SS 0.95V 125C` | -0.012 | -0.1 | 14 | 0.212 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.254 | 0.0 | 0 | 0.056 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.443 | 0.0 | 0 | 0.026 | 0 |
+| `util7-clk4p1` | 4.10 | `slow  SS 0.95V 125C` | 0.003 | 0.0 | 0 | 0.180 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.141 | 0.0 | 0 | 0.044 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.372 | 0.0 | 0 | 0.016 | 0 |
+| `util8-clk4p1` | 4.10 | `slow  SS 0.95V 125C` | -0.041 | -0.5 | 26 | 0.209 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.243 | 0.0 | 0 | 0.046 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.435 | 0.0 | 0 | 0.018 | 0 |
+| `util85-clk4p1` | 4.10 | `slow  SS 0.95V 125C` | -0.040 | -0.1 | 9 | 0.191 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.231 | 0.0 | 0 | 0.047 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.431 | 0.0 | 0 | 0.019 | 0 |
 
 ## Stage progression
 
@@ -103,3 +119,7 @@ problem is in synthesis, in placement, in the clock tree or in the routing.
 | `07-rfreset` | -0.059 | 0.002 | -0.039 | -0.061 | 0.041 |
 | `clk4p1_ehigh` | 0.003 | 0.002 | -0.013 | 0.001 | 0.015 |
 | `08-bypass` | -0.008 | 0.011 | -0.044 | -0.019 | 0.055 |
+| `util6-clk4p1` | -0.012 | 0.003 | -0.012 | -0.015 | 0.015 |
+| `util7-clk4p1` | 0.005 | 0.000 | 0.003 | 0.005 | -0.003 |
+| `util8-clk4p1` | -0.026 | -0.000 | -0.041 | -0.026 | 0.041 |
+| `util85-clk4p1` | -0.009 | 0.000 | -0.040 | -0.009 | 0.040 |
