@@ -2,7 +2,7 @@
 #############################################################################
 # Design-space sweeps for the pipelined CPU.
 #
-#   bash sweep.sh fmax             find the real closing frequency at slow
+#   bash sweep.sh fmax             hard-constrained fmax probe, 2.5 to 3.8 ns
 #   bash sweep.sh util 4.1         utilization curve at a 4.1 ns clock
 #   bash sweep.sh confirm 4.1      is a closure at 4.1 ns repeatable?
 #
@@ -47,16 +47,30 @@ case "$MODE" in
   fmax)
     # WHAT IS THE REAL CLOSING FREQUENCY AT THE SIGNOFF CORNER.
     #
-    # Walking outward finds the first period that closes and the last that
-    # does not, which together bracket the answer. A sweep with no failing
-    # point cannot show you where the edge is, so include one you expect to
-    # miss.
+    # THIS USED TO WALK 3.9 TO 4.3 AND IT MEASURED NOTHING ABOUT THE DESIGN.
+    # Converting every run to the delay it actually achieved, period minus
+    # slack, the tool tracks whatever it is handed:
     #
-    # NOTE: the 3.9 to 4.3 range was chosen for the OLD RTL, whose register
-    # file wrote on the negedge. That design is gone. Re-pick the range from
-    # wherever the current one closes before reading anything into these.
-    for p in 3.9 4.0 4.1 4.3; do
-        run_one "$p" 0.70 "fmax-clk$(echo "$p" | tr '.' 'p')" "fmax sweep at 0.70 util"
+    #     target 3.9 -> achieved 3.939      target 4.2 -> achieved 4.222
+    #     target 4.0 -> achieved 4.045      target 4.3 -> achieved 4.329
+    #     target 4.1 -> achieved 4.123
+    #
+    # One for one, on both the half-cycle and the bypassed RTL, across 400 ps.
+    # The optimiser builds to spec and stops twenty to forty picoseconds short,
+    # so every one of those runs reported the CONSTRAINT back, not the design.
+    #
+    # The README already says why: a run that meets its constraint stops
+    # optimising and spends the rest on area, so to measure a design you
+    # constrain it far tighter than it can possibly meet and read the delay.
+    # A run that NEARLY meets it stops too.
+    #
+    # So this range is chosen to STRADDLE the knee. 3.8 is next to a period
+    # already known to track, and 2.5 should be well past anything this design
+    # can do. READ ACHIEVED DELAY, NOT WNS: the answer is the period at which
+    # achieved stops falling, and below the knee WNS goes hugely negative,
+    # which is the experiment working rather than the design failing.
+    for p in 2.5 3.0 3.4 3.8; do
+        run_one "$p" 0.70 "fmax2-clk$(echo "$p" | tr '.' 'p')" "hard-constrained fmax probe at 0.70 util"
     done
     ;;
 
@@ -119,7 +133,7 @@ case "$MODE" in
 
   *)
     echo "usage:"
-    echo "   bash sweep.sh fmax             four runs, 3.9 to 4.3 ns at 0.70"
+    echo "   bash sweep.sh fmax             four runs, 2.5 to 3.8 ns, read ACHIEVED delay"
     echo "   bash sweep.sh util <period>    four runs, 0.60 to 0.85 utilization"
     echo "   bash sweep.sh confirm <period> four runs at 0.68 to 0.72, a noise probe"
     exit 1
@@ -135,3 +149,27 @@ echo
 echo "The table is results/QOR.md. Read the BY CORNER section: the slow"
 echo "column is signoff, and a run closes when its slow Setup WNS is positive"
 echo "with zero violations."
+echo
+echo "FOR THE fmax MODE, THAT IS THE WRONG NUMBER TO READ. Compute the delay"
+echo "each run actually achieved, which is period minus slow Setup WNS:"
+echo
+python3 - <<'PY'
+import csv, os
+p = os.path.join('results', 'qor.csv')
+try:
+    rows = [r for r in csv.DictReader(open(p)) if r['run'].startswith('fmax2-')]
+except Exception:
+    rows = []
+if rows:
+    print('  %-18s %8s %10s %11s' % ('run', 'target', 'WNS', 'ACHIEVED'))
+    for r in sorted(rows, key=lambda x: float(x['clk_ns'])):
+        try:
+            t, w = float(r['clk_ns']), float(r['wns_setup'])
+        except ValueError:
+            continue
+        print('  %-18s %8.2f %10.3f %11.3f' % (r['run'], t, w, t - w))
+    print()
+    print('  Tracking means achieved is a few tens of ps above target: the tool')
+    print('  built to spec and the design was never pushed. The knee is the')
+    print('  first target where achieved STOPS falling. That is the real fmax.')
+PY
