@@ -55,7 +55,7 @@ KEEP += ["41_hold_%s.rpt" % t for t in CORNERS]
 # because those were signed off at typical and the slow column is the penalty
 # they were never judged by.
 FIELDS = [
-    "run", "note", "clk_ns", "util", "date",
+    "run", "note", "clk_ns", "util", "effort", "date",
     "wns_place", "wns_cts", "wns_hold_cts", "wns_setup", "wns_hold",
     "n_setup_viol", "n_hold_viol", "tns_setup",
     "cells", "fillers", "flops",
@@ -376,6 +376,26 @@ def parse_util(run_dir):
     return 0.70
 
 
+def parse_effort(run_dir):
+    """
+    The synthesis effort the run was BUILT at, out of RUN.env.
+
+    Every run before 2026-08-11 was synthesised at medium, which was hardcoded
+    in genus.tcl, so an absent line reads back as the medium those runs
+    actually used. That is the same convention parse_util follows.
+
+    Without this column two runs at the same period and utilization differing
+    only in effort are indistinguishable in the table, and telling them apart
+    is the entire point of running the second one.
+    """
+    text = _read(Path(run_dir) / "RUN.env")
+    if text:
+        m = re.search(r"SYN_EFFORT=(\w+)", text)
+        if m:
+            return m.group(1)
+    return "medium"
+
+
 def parse_clock(run_dir):
     """
     Clock period out of the SDC Genus wrote, which is the one Innovus used.
@@ -467,6 +487,7 @@ def parse_run(run_dir):
     row["wns_place_start"] = parse_flow_qor(run_dir)
     row["clk_ns"] = parse_clock(run_dir)
     row["util"] = parse_util(run_dir)
+    row["effort"] = parse_effort(run_dir)
     row["date"] = _gen_date(rpt / "44_summary.rpt") or ""
 
     return {k: ("" if v is None else v) for k, v in row.items()}
@@ -613,16 +634,17 @@ def write_markdown(rows, md_path):
     # 50 setup and exactly 50 hold, which was -max_paths 50 and not a count.
     # The true figure was 362 failing paths and -82.8 ns of TNS.
     head = (
-        "| Run | Clk | Util | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
+        "| Run | Clk | Util | Effort | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
+        "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
     )
     lines = []
     for r in rows:
         lines.append(
-            "| `{run}` | {clk} | {util} | {ws} | {ts} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
+            "| `{run}` | {clk} | {util} | {eff} | {ws} | {ts} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
                 run=r.get("run", "?"),
                 clk=_fmt(r.get("clk_ns"), 2),
                 util=_fmt(r.get("util"), 2),
+                eff=r.get("effort") or "medium",
                 ws=_fmt(r.get("wns_setup")),
                 ts=_fmt(r.get("tns_setup"), 1),
                 ns=_viol(r.get("n_setup_viol")),

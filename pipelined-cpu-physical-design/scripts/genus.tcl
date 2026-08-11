@@ -102,10 +102,29 @@ read_sdc $SDC
 #
 # medium effort on the first pass. Push to high once the flow runs clean
 # and you are chasing a number rather than a result.
+#
+# The effort comes from the environment rather than from an edit here, so a
+# run RECORDS what it was built at. run.sh writes it into RUN.env and qor.py
+# puts it in the table beside the clock. Two runs at the same period that
+# differ only in effort are otherwise indistinguishable in the results, which
+# is the one thing this experiment exists to tell apart.
+#
+# A bad value is an error, not a fallback. Silently reverting a typo'd
+# "hgih" to medium would produce a run labelled high effort that was not, and
+# a wrong number that looks measured is worse than a failed run.
 #--------------------------------------------------------------------------
-set_db syn_generic_effort medium
-set_db syn_map_effort     medium
-set_db syn_opt_effort     medium
+set syn_effort "medium"
+if {[info exists ::env(SYN_EFFORT)]} {
+    set syn_effort $::env(SYN_EFFORT)
+}
+if {[lsearch -exact {low medium high} $syn_effort] < 0} {
+    error "SYN_EFFORT must be low, medium or high, not '$syn_effort'"
+}
+puts "INFO: synthesis effort = $syn_effort"
+
+set_db syn_generic_effort $syn_effort
+set_db syn_map_effort     $syn_effort
+set_db syn_opt_effort     $syn_effort
 
 syn_generic
 syn_map

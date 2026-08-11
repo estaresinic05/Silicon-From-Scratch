@@ -5,6 +5,7 @@
 #   ./run.sh                                 full flow at the default clock
 #   ./run.sh --period 2.5 --note "tighten"   full flow at 2.5 ns
 #   ./run.sh --period 4.0 --util 0.80        ...at 80% core utilization
+#   ./run.sh --period 4.1 --effort high      ...synthesise at high effort
 #   ./run.sh --period 4.0 --artifacts        ...also write DEF, netlist, SDF, GDS
 #   ./run.sh --name baseline --note "..."    name the run yourself
 #   ./run.sh --name baseline --from cts      resume an existing run at CTS
@@ -59,6 +60,7 @@ done
 
 PERIOD=3.0
 UTIL=0.70
+EFFORT=medium
 ARTIFACTS=0
 NAME=""
 FROM="syn"
@@ -75,7 +77,7 @@ usage() {
     # The line range is the comment block at the top of this file. It moves
     # whenever that block grows, and nothing catches it but reading the output,
     # so `./run.sh --help` is worth an eye after editing the header.
-    sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -751,6 +753,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --period) PERIOD="$2"; shift 2 ;;
         --util)   UTIL="$2";   shift 2 ;;
+        --effort) EFFORT="$2"; shift 2 ;;
         --artifacts) ARTIFACTS=1; shift ;;
         --name)   NAME="$2";   shift 2 ;;
         --from)   FROM="$2";   shift 2 ;;
@@ -765,6 +768,13 @@ done
 case "$TIMING" in
     mmmc|typ) ;;
     *) echo "--timing must be mmmc or typ"; exit 1 ;;
+esac
+
+# Checked here as well as in genus.tcl, so a typo costs a second rather than
+# the minutes it takes Genus to start and reach the effort lines.
+case "$EFFORT" in
+    low|medium|high) ;;
+    *) echo "--effort must be low, medium or high"; exit 1 ;;
 esac
 
 # The two corner knobs are separate on purpose, because they answer different
@@ -787,10 +797,12 @@ export SYN_CORNER="$SYN_CORNER_ARG"
 if [ -z "$NAME" ]; then
     NAME="clk$(echo "$PERIOD" | tr '.' 'p')"
     [ "$UTIL" = "0.70" ] || NAME="${NAME}_u$(echo "$UTIL" | tr -d '0.')"
+    [ "$EFFORT" = "medium" ] || NAME="${NAME}_e${EFFORT}"
 fi
 
 export CLK_PERIOD="$PERIOD"
 export CORE_UTIL="$UTIL"
+export SYN_EFFORT="$EFFORT"
 export WRITE_ARTIFACTS="$ARTIFACTS"
 
 RUNDIR="$ROOT/runs/$NAME"
@@ -810,16 +822,25 @@ cd "$RUNDIR"
 if [ "$FROM" = "syn" ]; then
     printf 'CLK_PERIOD=%s
 CORE_UTIL=%s
-' "$PERIOD" "$UTIL" > RUN.env
+SYN_EFFORT=%s
+' "$PERIOD" "$UTIL" "$EFFORT" > RUN.env
 elif [ -f RUN.env ]; then
     . ./RUN.env
     PERIOD="$CLK_PERIOD"
     export CLK_PERIOD
+    # A resumed run keeps the effort it was SYNTHESISED at. Resuming does not
+    # re-synthesise, so taking the default here would relabel a high-effort
+    # run as medium in its own banner and in the table, and the relabelling
+    # would survive as the record of what was built.
+    if [ -n "${SYN_EFFORT:-}" ]; then EFFORT="$SYN_EFFORT"; fi
+    export SYN_EFFORT="$EFFORT"
 fi
 
 echo "=================================================================="
 echo " run     $NAME"
 echo " clock   $PERIOD ns"
+echo " util    $UTIL"
+echo " effort  $EFFORT"
 echo " from    $FROM"
 echo " dir     $RUNDIR"
 echo "=================================================================="
