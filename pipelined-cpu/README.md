@@ -266,6 +266,8 @@ The testbenches count cycles. They cannot say how long a cycle is, so both desig
 | Cycles for the program | 34 | 48 |
 | **Runtime** | 118.1 ns | **87.0 ns** |
 
+**These are pre-layout numbers.** They come from logic synthesis alone, with no clock tree, no wire parasitics and no corner spread, so they answer *which architecture is faster* rather than *how fast this will run*. This design has since been taken through Cadence place and route in [`pipelined-cpu-physical-design/`](https://github.com/estaresinic05/Silicon-From-Scratch/tree/main/pipelined-cpu-physical-design), where it closes at **244 MHz at the slow signoff corner**, and at 358 MHz when judged at typical. The comparison here is unaffected by that, because both designs were measured the same way as each other.
+
 The memory addition is asymmetric, and that is most of the story: the single-cycle critical path crosses **both** memories inside one clock, while no pipeline stage crosses more than one.
 
 The pipeline needed a **1.41x** clock advantage to pay for its extra 14 cycles. It got **1.92x**, so the program finishes **1.36x faster** for a third more silicon. On a longer program the margin widens, because the three fill cycles are a fixed cost this 34-retirement program pays in full.

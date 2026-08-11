@@ -11,7 +11,9 @@ layout on Nangate45, using Cadence Genus and Innovus.
 <p align="center">
   <em>Left: the routed core, 131.29 &times; 130.2 &micro;m, 4,332 standard cells in
   93 rows at 69.7% density, wired with 73,127 &micro;m of copper. Meets setup
-  timing at 357 MHz with 2 ps to spare.<br>
+  timing at 357 MHz with 2 ps to spare <strong>at the typical corner</strong>.
+  That is not the signoff figure: judged at the slow corner, this design does
+  not close below about 4.1 ns, which is 244 MHz.<br>
   Right: the same layout zoomed until individual cells resolve. The horizontal
   lines are the metal1 power rails that every cell straddles.</em>
 </p>
@@ -21,11 +23,19 @@ verified simulation design and nothing here touches it. That design passes its
 testbench at 34 retirements in 48 cycles and should stay pinned. This copy will
 drift as physical design demands things simulation does not care about.
 
-The numbers above, and every number below, come from the reports in
-`results/03-ring-fix/reports/`, which are committed so each one can be checked
-against its source. That run is the current best: 2.8 ns met post-route, clean
-connectivity, and **zero DRC violations**. `results/QOR.md` carries one row per
-run.
+The die shots above come from `results/03-ring-fix/reports/`, which is committed
+so every number can be checked against its source. **That run was judged at a
+single typical corner**, and that is why its 2.8 ns is no longer the headline:
+re-judged at slow, the same layout misses by −0.968 ns across 362 endpoints. It
+is still the best *typical* run, with clean connectivity and **zero DRC
+violations**, and it is worth reading as the point where this project learned
+that a corner is part of a number rather than a footnote to one.
+
+**The signoff result is 244 MHz**, from `results/fmax-clk4p1/`, judged at slow
+with hold clean at all three corners. `results/QOR.md` carries one row per run
+and a **By corner** table beside it. Every timing figure on this page states the
+corner it was measured at, and any figure that does not is a bug in this
+document. All of them assume `IO_DELAY = 0.30 × CLK_PERIOD`.
 
 ---
 
@@ -279,13 +289,25 @@ last value that passed post-route is the real number.
 ./run.sh --period 2.2 --note "sweep step 2"
 ```
 
-**Where the sweep has got to: 2.8 ns passes post-route with 2 ps to spare.**
-The worst path launches out of the writeback stage, crosses the forwarding
-comparators into the ALU operand mux, and then spends 2.12 ns of its 2.85 ns
-walking the carry chain of the 32-bit ripple-carry adder. That one chain is 74%
-of the clock while the adder is under 3% of the area, and because it is
-instantiated structurally the synthesiser cannot restructure out of it. The next
-real gain is a different adder, not a tighter constraint.
+**Where the sweep has got to. At the typical corner, 2.8 ns passes post-route
+with 2 ps to spare. At the slow signoff corner, nothing closes below about
+4.1 ns.** Both are real measurements of the same design and they are 46% apart,
+which is the most important sentence on this page.
+
+At typical, the worst path launches out of the writeback stage, crosses the
+forwarding comparators into the ALU operand mux, and then spends 2.12 ns of its
+2.85 ns walking the carry chain of the 32-bit ripple-carry adder. That one chain
+is 74% of the clock while the adder is under 3% of the area, and because it is
+instantiated structurally the synthesiser cannot restructure out of it.
+
+That made a different adder look like the obvious next gain. **It was measured,
+and it is not.** Wrapped identically between registers and judged at slow, a
+hand-written carry-lookahead came out 12 ps *slower* than the ripple carry,
+1241 ps against 1229, at 741 cells against 1129. Smaller, not faster. Genus
+rebuilds a clean chain of full adders into its own carry structure, and this CPU
+instantiates one full adder per bit *inside* a per-bit slice, between an invert
+mux pair and a result mux, so synthesis never sees a 32-bit addition to
+restructure in the first place.
 
 Both Genus and Innovus rerun at each step, and they must: synthesis targets the
 constraint too, so a netlist built for 3.0 ns has no reason to be any faster

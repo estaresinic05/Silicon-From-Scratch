@@ -270,6 +270,8 @@ The [pipelined CPU](../pipelined-cpu/) implements the same instruction subset an
 | Cycles for the program | **34** | 48 |
 | **Runtime** | 118.1 ns | **87.0 ns** |
 
+**These are pre-layout numbers.** They come from logic synthesis alone, with no clock tree, no wire parasitics and no corner spread, so they answer *which architecture is faster* rather than *how fast this will run*. The pipelined design has since been taken through Cadence place and route in [`pipelined-cpu-physical-design/`](https://github.com/estaresinic05/Silicon-From-Scratch/tree/main/pipelined-cpu-physical-design), where it closes at **244 MHz at the slow signoff corner**, and at 358 MHz when judged at typical. The comparison here is unaffected by that, because both designs were measured the same way as each other.
+
 This design wins on cycle count and loses on clock period, and the second effect is larger. The reason is where the memories sit: a single-cycle critical path crosses **both** of them inside one clock, while no pipeline stage crosses more than one. That is what the asymmetric memory addition in the table represents, and it is most of the 1.92x clock difference.
 
 The pipeline needed 1.41x — that is 48 / 34 — to break even on the extra cycles it spends stalling and flushing. It got 1.92x, so the same program finishes 1.36x sooner there for a third more silicon.
