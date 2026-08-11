@@ -31,6 +31,10 @@ that clock. Frozen reports for every run are in `results/<run>/reports/`.
 | `confirm-clk4p1-u69` | 4.10 | 0.69 | medium | -0.010 | -0.0 | 3 | 0.015 | 0 | 5,237 | 70.7% | 80,882 | closure repeatability probe at 4.1 ns |
 | `confirm-clk4p1-u71` | 4.10 | 0.71 | medium | -0.042 | -0.1 | 14 | 0.024 | 0 | 5,196 | 72.6% | 86,140 | closure repeatability probe at 4.1 ns |
 | `confirm-clk4p1-u72` | 4.10 | 0.72 | medium | -0.029 | -0.1 | 3 | 0.018 | 0 | 5,193 | 73.6% | 82,184 | closure repeatability probe at 4.1 ns |
+| `confirm-clk4p2-u68` | 4.20 | 0.68 | medium | -0.022 | -0.4 | 41 | 0.027 | 0 | 5,177 | 69.8% | 87,910 | closure repeatability probe at 4.2 ns |
+| `confirm-clk4p2-u69` | 4.20 | 0.69 | medium | -0.020 | -0.1 | 9 | 0.025 | 0 | 5,159 | 70.8% | 87,777 | closure repeatability probe at 4.2 ns |
+| `confirm-clk4p2-u71` | 4.20 | 0.71 | medium | -0.030 | -0.3 | 39 | 0.027 | 0 | 5,182 | 73.0% | 87,460 | closure repeatability probe at 4.2 ns |
+| `confirm-clk4p2-u72` | 4.20 | 0.72 | medium | -0.017 | -0.0 | 7 | 0.027 | 0 | 5,130 | 73.8% | 86,935 | closure repeatability probe at 4.2 ns |
 
 ## By corner
 
@@ -113,6 +117,18 @@ column against a corner column and never against the table above.
 | `confirm-clk4p1-u72` | 4.10 | `slow  SS 0.95V 125C` | -0.029 | -0.1 | 3 | 0.172 | 0 |
 |  |  | `typ   TT 1.10V  25C` | 2.215 | 0.0 | 0 | 0.043 | 0 |
 |  |  | `fast  FF 1.25V   0C` | 2.430 | 0.0 | 0 | 0.018 | 0 |
+| `confirm-clk4p2-u68` | 4.20 | `slow  SS 0.95V 125C` | -0.022 | -0.4 | 41 | 0.211 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.233 | 0.0 | 0 | 0.057 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.461 | 0.0 | 0 | 0.027 | 0 |
+| `confirm-clk4p2-u69` | 4.20 | `slow  SS 0.95V 125C` | -0.020 | -0.1 | 9 | 0.200 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.291 | 0.0 | 0 | 0.053 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.492 | 0.0 | 0 | 0.025 | 0 |
+| `confirm-clk4p2-u71` | 4.20 | `slow  SS 0.95V 125C` | -0.030 | -0.3 | 39 | 0.212 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.322 | 0.0 | 0 | 0.057 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.520 | 0.0 | 0 | 0.027 | 0 |
+| `confirm-clk4p2-u72` | 4.20 | `slow  SS 0.95V 125C` | -0.017 | -0.0 | 7 | 0.212 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.294 | 0.0 | 0 | 0.056 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.494 | 0.0 | 0 | 0.027 | 0 |
 
 ## Stage progression
 
@@ -143,3 +159,7 @@ problem is in synthesis, in placement, in the clock tree or in the routing.
 | `confirm-clk4p1-u69` | -0.004 | 0.005 | -0.010 | -0.009 | 0.015 |
 | `confirm-clk4p1-u71` | -0.006 | 0.002 | -0.042 | -0.008 | 0.044 |
 | `confirm-clk4p1-u72` | -0.010 | 0.005 | -0.029 | -0.015 | 0.034 |
+| `confirm-clk4p2-u68` | -0.002 | 0.001 | -0.022 | -0.003 | 0.023 |
+| `confirm-clk4p2-u69` | -0.010 | 0.001 | -0.020 | -0.011 | 0.021 |
+| `confirm-clk4p2-u71` | -0.010 | -0.000 | -0.030 | -0.010 | 0.030 |
+| `confirm-clk4p2-u72` | -0.018 | 0.003 | -0.017 | -0.021 | 0.020 |
