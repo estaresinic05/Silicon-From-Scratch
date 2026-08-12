@@ -766,6 +766,65 @@ if {$DROPPED > 0} {
     # was written, and corner_step recorded OK because the command had not
     # errored. Hence the artifact check below: a step is done when its evidence
     # exists on disk, not when its return code is zero.
+    #----------------------------------------------------------------------
+    # TIMING COVERAGE: is every endpoint actually being checked?
+    #
+    # THE VACUOUS PASS IS THE FAILURE MODE THIS EXISTS TO CATCH, and this
+    # project has now been bitten by it three times. `timeDesign -postRoute
+    # -si` warned, did nothing and returned success. The gate simulation ran
+    # with 0 of 12,285 $setuphold checks annotated, so "no violations" and
+    # "no checks alive" printed identically. And a run named for a margin no
+    # setOptMode option had accepted would have built without it.
+    #
+    # STA HAS EXACTLY THE SAME HOLE. An unconstrained endpoint raises no
+    # violation, so a clean WNS can be clean because paths are not being
+    # checked rather than because they pass. check_timing names them:
+    # unclocked registers, missing input or output delay, combinational
+    # loops, endpoints carrying no check at all.
+    #
+    # READ THIS BEFORE TRUSTING ANY FREQUENCY, and before adding derates.
+    # Refining the margin on an incomplete path set measures the wrong thing
+    # more precisely, which is worse than not measuring it.
+    #
+    # Two spellings tried, because an option or command Innovus does not know
+    # can warn and return success. report_analysis_coverage is a Tempus
+    # command and may not exist here; its absence is recorded, not fatal.
+    #----------------------------------------------------------------------
+    set COV_OK 0
+    foreach cmd {check_timing checkTimingSetup} {
+        if {[corner_step coverage_$cmd "$cmd -verbose > reports/47_check_timing.rpt"]} {
+            set COV_OK 1
+            break
+        }
+    }
+    if {!$COV_OK} {
+        # No -verbose, in case that is what it choked on.
+        foreach cmd {check_timing checkTimingSetup} {
+            if {[corner_step coverage_plain_$cmd "$cmd > reports/47_check_timing.rpt"]} {
+                set COV_OK 1
+                break
+            }
+        }
+    }
+
+    # A step is done when its evidence exists on disk, not when its return
+    # code is zero. An empty report is the thing that would read as "clean".
+    if {$COV_OK} {
+        if {[file exists reports/47_check_timing.rpt] && [file size reports/47_check_timing.rpt] > 0} {
+            puts "### timing coverage written: reports/47_check_timing.rpt ([file size reports/47_check_timing.rpt] bytes)"
+        } else {
+            lappend CORNER_STATUS "coverage WROTE NOTHING to reports/47_check_timing.rpt"
+            puts "### ####################################################"
+            puts "### check_timing returned success and wrote nothing."
+            puts "### Treat the timing coverage of this run as UNKNOWN."
+            puts "### ####################################################"
+        }
+    } else {
+        lappend CORNER_STATUS "coverage NOT RUN: no check_timing spelling accepted"
+    }
+
+    corner_step analysis_coverage {report_analysis_coverage > reports/48_analysis_coverage.rpt}
+
     corner_step census_setup {timeDesign -postRoute       -expandedViews -outDir cornerReports}
     corner_step census_hold  {timeDesign -postRoute -hold -expandedViews -outDir cornerReports}
 

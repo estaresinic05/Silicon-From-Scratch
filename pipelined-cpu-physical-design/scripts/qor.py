@@ -34,6 +34,10 @@ KEEP = [
     "10_place_timing.rpt", "20_cts_setup.rpt", "21_cts_hold.rpt",
     "40_final_setup.rpt", "41_final_hold.rpt", "42_final_area.rpt",
     "43_final_power.rpt", "44_summary.rpt", "49_corner_status.rpt",
+    # Timing coverage. 45 and 46 are taken by DRC and connectivity, which are
+    # copied in below from the run directory rather than from reports/, so they
+    # are not in this list and the numbers still collide if reused.
+    "47_check_timing.rpt", "48_analysis_coverage.rpt",
 ]
 
 # The three reporting corners, in the order they are printed. These are the
