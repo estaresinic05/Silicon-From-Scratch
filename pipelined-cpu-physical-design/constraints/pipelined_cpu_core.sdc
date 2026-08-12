@@ -45,7 +45,26 @@ set_clock_uncertainty -setup 0.10 [get_clocks clk]
 set_clock_uncertainty -hold  0.02 [get_clocks clk]
 set_clock_transition  0.05 [get_clocks clk]
 
-# reset is asynchronous by design, so it is not a timed path.
+# The RAW reset port is asynchronous and genuinely cannot be timed: it has no
+# relationship to clk, so there is no edge to measure it against.
+#
+# THIS LINE USED TO DISABLE FAR MORE THAN THAT, and check_timing found it on
+# 2026-08-12. Before reset_sync existed the port drove the reset pin of all
+# 1347 flops directly, so `-from [get_ports reset]` made every one of those
+# pins an unconstrained endpoint: 4041 uncons_endpoint warnings, and all 1349
+# recovery checks reported UNTESTED by report_analysis_coverage. Asserting a
+# reset asynchronously is correct. Releasing one that way is a real silicon
+# bug, and the check that would have caught it was switched off.
+#
+# It now covers only what it should. rst_sync is driven by a register inside
+# reset_sync, so every path from there to a flop's reset pin STARTS AT A FLOP,
+# not at this port, and is timed normally. `-from` constrains startpoints, so
+# those paths are not matched by this exception. What remains matched is the
+# port to the synchroniser's own async pins, which is the one arc that really
+# is unmeasurable.
+#
+# The `no_input_delay` warning on this port is expected and correct for the
+# same reason: there is no clock to reference an input delay to.
 set_false_path -from [get_ports reset]
 
 #############################################################################

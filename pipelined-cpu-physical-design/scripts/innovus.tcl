@@ -825,6 +825,30 @@ if {$DROPPED > 0} {
 
     corner_step analysis_coverage {report_analysis_coverage > reports/48_analysis_coverage.rpt}
 
+    # THE TABLE ABOVE IS LATE MODE ONLY. Its rows are ExternalDelay (Late),
+    # PulseWidth, Recovery and Setup, and there is no Hold row at all, so a
+    # design could have every hold check untested and this report would look
+    # complete. Hold is the failure that kills silicon outright rather than
+    # merely slowing it down, so it deserves the same question asked of it.
+    #
+    # Appended to the same file, because one report is what actually gets
+    # read, and report_analysis_coverage prints its own command header so the
+    # two tables stay distinguishable.
+    set HOLD_COV 0
+    set n 0
+    foreach opt {"-check_type hold" "-early"} {
+        incr n
+        if {[corner_step analysis_coverage_hold$n \
+                "report_analysis_coverage $opt >> reports/48_analysis_coverage.rpt"]} {
+            set HOLD_COV 1
+            break
+        }
+    }
+    if {!$HOLD_COV} {
+        lappend CORNER_STATUS "analysis_coverage_hold NOT RUN: no option accepted, 48 is LATE MODE ONLY"
+        puts "### hold coverage not reported; treat 48_analysis_coverage.rpt as late mode only"
+    }
+
     corner_step census_setup {timeDesign -postRoute       -expandedViews -outDir cornerReports}
     corner_step census_hold  {timeDesign -postRoute -hold -expandedViews -outDir cornerReports}
 

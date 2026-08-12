@@ -84,6 +84,12 @@ module pipelined_cpu_core (
     output wire        dbg_wb_enable
 );
 
+  /*--------------- synchronised reset ---------------*/
+  /* The reset every flop in the design actually sees. It asserts the instant
+     the port does and releases on a clock edge, so the whole pipeline leaves
+     reset together. See reset_sync.v for why the raw port cannot do that. */
+  wire       rst_sync;
+
   /*-------- instruction fields, out of IF/ID --------*/
   wire [6:0] IFID_opcode;
   wire [2:0] IFID_funct3;
@@ -177,9 +183,20 @@ module pipelined_cpu_core (
       .IFID_forwardB(IFID_forwardB)
   );
 
+  /* THE ONLY CONSUMER OF THE RAW PORT. Everything downstream takes rst_sync
+     instead, which is what turns 1349 untested recovery checks into timed
+     ones: the reset arriving at each flop is now sourced by a register rather
+     than by a port, so it is no longer covered by the SDC's false path from
+     the port and static timing checks it like any other signal. */
+  reset_sync u_reset_sync (
+      .clk(clk),
+      .async_reset(reset),
+      .sync_reset(rst_sync)
+  );
+
   pipelined_cpu_datapath datapath (
       .clk(clk),
-      .reset(reset),
+      .reset(rst_sync),
       .IFID_branch(IFID_branch),
       .IFID_memRead(IFID_memRead),
       .IFID_operation(IFID_operation),
