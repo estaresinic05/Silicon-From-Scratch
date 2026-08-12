@@ -1,0 +1,97 @@
+*----------------------------------------------------------------------------------------
+*	Innovus 23.12-s091_1 (64bit) 07/30/2024 16:11 (Linux 3.10.0-693.el7.x86_64)
+*	
+*
+* 	Date & Time:	2026-Aug-12 20:55:15 (2026-Aug-12 20:55:15 GMT)
+*
+*----------------------------------------------------------------------------------------
+*
+*	Design: pipelined_cpu_core
+*
+*	Liberty Libraries used: 
+*	        WC_VIEW: /home/nanohub/estaresinic05/MacroPlacement/Enablements/NanGate45/lib/NangateOpenCellLibrary_slow.lib
+*
+*	Power Domain used: 
+*              Rail:        VDD      Voltage:       0.95 
+*
+*       Power View : WC_VIEW
+*
+*       User-Defined Activity : N.A.
+*
+*       Activity File: N.A.
+*
+*       Hierarchical Global Activity: N.A.
+*
+*       Global Activity: N.A.
+*
+*       Sequential Element Activity: 0.200000
+*
+*       Primary Input Activity: 0.200000
+*
+*       Default icg ratio: N.A.
+*
+*       Global Comb ClockGate Ratio: N.A.
+*
+*	Power Units = 1mW
+*
+*	Time Units = 1e-09 secs 
+*
+*       report_power -outfile reports/43_final_power.rpt
+*
+-----------------------------------------------------------------------------------------
+
+
+Total Power 
+-----------------------------------------------------------------------------------------
+Total Internal Power:        1.83538471 	   60.3697%
+Total Switching Power:       1.03368644 	   34.0001%
+Total Leakage Power:         0.17116993 	    5.6301%
+Total Power:                 3.04024107 
+-----------------------------------------------------------------------------------------
+
+
+Group                           Internal   Switching     Leakage       Total  Percentage 
+                                Power      Power         Power         Power  (%)        
+-----------------------------------------------------------------------------------------
+Sequential                         1.267      0.1459     0.08846       1.501       49.37 
+Macro                                  0           0           0           0           0 
+IO                                     0           0           0           0           0 
+Combinational                     0.3176      0.4404      0.0795      0.8375       27.55 
+Clock (Combinational)             0.2512      0.4474    0.003208      0.7018       23.08 
+Clock (Sequential)                     0           0           0           0           0 
+-----------------------------------------------------------------------------------------
+Total                              1.835       1.034      0.1712        3.04         100 
+-----------------------------------------------------------------------------------------
+
+
+Rail                  Voltage   Internal   Switching     Leakage       Total  Percentage 
+                                Power      Power         Power         Power  (%)        
+-----------------------------------------------------------------------------------------
+VDD                      0.95      1.835       1.034      0.1712        3.04         100 
+
+
+Clock                           Internal   Switching     Leakage       Total  Percentage 
+                                Power      Power         Power         Power  (%)        
+-----------------------------------------------------------------------------------------
+clk                               0.2512      0.4474    0.003208      0.7018       23.08 
+-----------------------------------------------------------------------------------------
+Total (excluding duplicates)      0.2512      0.4474    0.003208      0.7018       23.08 
+-----------------------------------------------------------------------------------------
+Clock: clk
+Clock Period: 0.004250 usec 
+Clock Toggle Rate:   470.5882 Mhz 
+Clock Static Probability:  0.5000
+
+
+
+-----------------------------------------------------------------------------------------
+*	Power Distribution Summary: 
+*                Highest Average Power: datapath/CTS_ccl_a_buf_00080 (CLKBUF_X3):         0.005941 
+*                Highest Leakage Power: datapath/branch_or_inc_4/FE_OFC210_IFID_takeBranch (BUF_X8):        0.0001182 
+*          Total Cap:      3.63729e-11 F
+*          Total instances in design:  5344
+*          Total instances in design with no power:     0
+*          Total instances in design with no activity:     0
+*          Total Fillers and Decap:     0
+-----------------------------------------------------------------------------------------
+
