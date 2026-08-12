@@ -70,6 +70,7 @@ TS_EXPLICIT=0
 # Flat on-chip-variation derate. 0 is off, which is every run before
 # 2026-08-12. 0.05 means late paths 5% slower, early paths 5% faster.
 DERATE=0
+DERATE_EXPLICIT=0
 ARTIFACTS=0
 NAME=""
 FROM="syn"
@@ -799,7 +800,7 @@ while [ $# -gt 0 ]; do
         --util)   UTIL="$2";   shift 2 ;;
         --effort) EFFORT="$2"; shift 2 ;;
         --target-slack) TARGET_SLACK="$2"; TS_EXPLICIT=1; shift 2 ;;
-        --derate) DERATE="$2"; shift 2 ;;
+        --derate) DERATE="$2"; DERATE_EXPLICIT=1; shift 2 ;;
         --artifacts) ARTIFACTS=1; shift ;;
         --name)   NAME="$2";   shift 2 ;;
         --from)   FROM="$2";   shift 2 ;;
@@ -930,6 +931,26 @@ elif [ -f RUN.env ]; then
         mv RUN.env.tmp RUN.env
     fi
     export TARGET_SLACK
+
+    # Same for the derate, and re-judging an existing netlist under OCV is the
+    # MAIN way this knob gets used, so getting it wrong here mislabels exactly
+    # the runs it matters most for. The 2026-08-12 measurement of what OCV
+    # costs came back correct and was recorded as derate 0.000, because
+    # RUN.env predated the field and the table believed the file.
+    #
+    # An explicit --derate wins and the file is corrected, because qor.py reads
+    # RUN.env to label the row and a row claiming a margin the run did not have
+    # is how a wrong number outlives the session that produced it.
+    TIMING_DERATE="${TIMING_DERATE:-0}"
+    if [ "$DERATE_EXPLICIT" = "1" ] && [ "$DERATE" != "$TIMING_DERATE" ]; then
+        echo "NOTE: --derate $DERATE overrides the $TIMING_DERATE in RUN.env."
+        TIMING_DERATE="$DERATE"
+        grep -v '^TIMING_DERATE=' RUN.env > RUN.env.tmp || true
+        printf 'TIMING_DERATE=%s\n' "$TIMING_DERATE" >> RUN.env.tmp
+        mv RUN.env.tmp RUN.env
+    fi
+    DERATE="$TIMING_DERATE"
+    export TIMING_DERATE
 fi
 
 echo "=================================================================="

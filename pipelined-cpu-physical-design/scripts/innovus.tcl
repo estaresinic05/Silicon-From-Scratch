@@ -343,7 +343,24 @@ if {[info exists env(TIMING_DERATE)]} {
 if {$TIMING_DERATE != 0} {
     set EARLY [expr {1.0 - $TIMING_DERATE}]
     set LATE  [expr {1.0 + $TIMING_DERATE}]
-    if {[catch {set_timing_derate -early $EARLY -late $LATE} msg]} {
+    # PER DELAY CORNER, not once globally. Innovus warns about the bare form
+    # (TCLCMD-1725): it lands on every active delay corner at once, which
+    # overwrites any corner-specific derate already set and is wrong the moment
+    # slow and fast want different numbers, as they do in any real flow. Named
+    # corners here; the global form is kept only as a fallback so a flow with
+    # differently-named corners still gets its margin rather than none.
+    set DERATE_OK 0
+    foreach dc {WC BC} {
+        if {[catch {set_timing_derate -delay_corner $dc -early $EARLY -late $LATE} msg]} {
+            puts "### set_timing_derate on delay corner $dc REFUSED: $msg"
+        } else {
+            puts "### OCV derate on $dc: early $EARLY, late $LATE"
+            set DERATE_OK 1
+        }
+    }
+    if {$DERATE_OK} {
+        puts "### OCV derate applied per corner (+/- $TIMING_DERATE)"
+    } elseif {[catch {set_timing_derate -early $EARLY -late $LATE} msg]} {
         puts "### ####################################################"
         puts "### set_timing_derate REFUSED: $msg"
         puts "### TIMING_DERATE=$TIMING_DERATE was asked for and NOT applied."
@@ -577,11 +594,22 @@ saveDesign enc/06_final.enc
 # dynamic figure is an estimate at default toggle rates and the leakage figure
 # is real; say which is which when quoting it.
 #
-# antenna: verify_connectivity runs with -no_antenna, so nothing in this flow
-# has ever checked antenna rules. A long metal segment connected to a gate
-# collects charge during plasma etch and can destroy the oxide before the
-# protection diode is connected. Every real tapeout checks it; it is one
-# command.
+# ANTENNA IS NOT AVAILABLE ON THIS ENABLEMENT, and the reason is written down
+# rather than left as a silent gap. verify_connectivity runs with -no_antenna,
+# and adding the check on 2026-08-12 got:
+#
+#   IMPVPA-120: verifyProcessAntenna is obsolete, use verify_antenna
+#   IMPVPA-22:  failed to run because no process antenna information found
+#               for this design. Import the process antenna library data.
+#
+# The second is the real obstacle and no command fixes it. Nangate45's LEF
+# carries no ANTENNAGATEAREA or ANTENNADIFFAREA properties, so there are no
+# antenna rules to check against -- the tool is not refusing, there is nothing
+# to compare to. A production PDK ships them and the check is mandatory before
+# tape-out: a long metal segment on a gate collects charge during plasma etch
+# and can take the oxide out before the protection diode is connected.
+#
+# Deliberately left out, so that an absent report is never read as a clean one.
 foreach {label cmd} [list \
     "connectivity" {verify_connectivity -error 0 -geom_connect -no_antenna} \
     "drc"          {verify_drc -limit 100} \
@@ -589,7 +617,6 @@ foreach {label cmd} [list \
     "hold"         {report_timing -early -max_paths 50 -nworst 1 > reports/41_final_hold.rpt} \
     "area"         {report_area  > reports/42_final_area.rpt} \
     "power"        {report_power -outfile reports/43_final_power.rpt} \
-    "antenna"      {verifyProcessAntenna -reportfile reports/54_antenna.rpt} \
     "summary"      {summaryReport -noHtml -outfile reports/44_summary.rpt} \
 ] {
     if {[catch {eval $cmd} msg]} {
