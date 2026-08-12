@@ -284,6 +284,42 @@ if {$TARGET_SLACK != 0} {
 }
 
 #--------------------------------------------------------------------------
+# HOLD MARGIN. Policy, not an experiment, which is why it is not a run
+# parameter the way setup target slack is.
+#
+# Added 2026-08-12, when reset_sync made the removal checks real and 119 of
+# them failed at the fast corner. The worst was
+#
+#   u_reset_sync/stage2_reg/Q -> INV_X8 -> datapath/IFID_pc_reg[19]/RN
+#   removal 0.134   arrival 0.092   slack -0.061
+#
+# THE RESET PATH IS TOO FAST, which is the opposite of every timing problem
+# this project has had so far. Release propagates to 1347 flops through a
+# single inverter in 92 ps, and removal wants it held valid for 134 ps after
+# the edge. The fix is delay, and the optimiser inserts it if asked.
+#
+# Those 119 violations were there this morning as well. They were not being
+# checked, because the SDC false path made every reset pin an unconstrained
+# endpoint. Timing them is what surfaced this.
+#
+# 0.08 covers the 61 ps miss with room. A hold margin of a few tens of
+# picoseconds is ordinary practice regardless: hold has no frequency knob to
+# trade against, an OCV or SI surprise on a min-delay path is uncorrectable
+# after tapeout, and buffers are cheap.
+#--------------------------------------------------------------------------
+set HOLD_TARGET_SLACK 0.08
+if {[catch {setOptMode -opt_hold_target_slack $HOLD_TARGET_SLACK} msg]} {
+    puts "### ####################################################"
+    puts "### setOptMode -opt_hold_target_slack REFUSED: $msg"
+    puts "### Hold margin is NOT applied. Removal on the reset net is the"
+    puts "### check that needs it; do not read a clean hold column as clean."
+    puts "### ####################################################"
+} else {
+    if {[catch {getOptMode -opt_hold_target_slack} got]} { set got "(unreadable)" }
+    puts "### hold target slack -> $got"
+}
+
+#--------------------------------------------------------------------------
 # 2. Floorplan
 #
 # Utilization based rather than fixed size: the tool computes a core big

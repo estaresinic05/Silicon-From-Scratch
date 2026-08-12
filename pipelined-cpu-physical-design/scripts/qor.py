@@ -570,6 +570,31 @@ def _viol(v):
         return str(v)
 
 
+def _viol_checked(v, wns):
+    """
+    A violation count, marked `!` when it contradicts its own WNS.
+
+    route_opt_design's summary counts HOLD checks and not REMOVAL ones. The
+    moment reset_sync made the removal checks real, 119 of them failed at the
+    fast corner and this column still said 0, beside a WNS of -0.061. A zero
+    that cannot be true is worse than a missing number, because a missing
+    number reads as missing and a zero reads as a pass.
+
+    The two figures are NOT reconciled here on purpose. The signoff count and
+    the corner census are different measurements and this file already refuses
+    to mix them elsewhere; the honest move is to flag the contradiction and
+    send the reader to the census column, not to quietly substitute one for
+    the other.
+    """
+    s = _viol(v)
+    try:
+        if float(wns) < 0 and float(v) == 0:
+            return s + " !"
+    except (TypeError, ValueError):
+        pass
+    return s
+
+
 def _one_line(note):
     """
     A note, flattened to one line and stripped of pipes.
@@ -685,7 +710,7 @@ def write_markdown(rows, md_path):
                 # violations rendered as "-" and read as missing data. Zero
                 # violations is the whole point of a hold fix and it has to
                 # show as 0. "-" is reserved for genuinely absent.
-                nh=_viol(r.get("n_hold_viol")),
+                nh=_viol_checked(r.get("n_hold_viol"), r.get("wns_hold")),
                 cells=_int(r.get("cells")),
                 den=(_fmt(r.get("density_pct"), 1) + "%") if r.get("density_pct") else "-",
                 wire=_int(r.get("wire_um")),
@@ -699,7 +724,10 @@ def write_markdown(rows, md_path):
         "`python3 scripts/qor.py table` instead.\n\n"
         "Slacks are nanoseconds, worst path, post-route unless the column says\n"
         "otherwise. A negative setup WNS means the run did not make timing at\n"
-        "that clock. Frozen reports for every run are in `results/<run>/reports/`.\n\n"
+        "that clock. Frozen reports for every run are in `results/<run>/reports/`.\n"
+        "A hold count marked `!` contradicts its own WNS: the signoff summary counts\n"
+        "hold checks and not removal ones, so read the per-corner table below for the\n"
+        "real figure.\n\n"
         + head + "\n".join(lines) + "\n\n"
         + _corner_section(rows) +
         "## Stage progression\n\n"
