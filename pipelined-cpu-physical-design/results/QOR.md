@@ -37,8 +37,16 @@ that clock. Frozen reports for every run are in `results/<run>/reports/`.
 | `confirm-clk4p2-u72` | 4.20 | 0.72 | medium | 0.000 | -0.017 | -0.0 | 7 | 0.027 | 0 | 5,130 | 73.8% | 86,935 | closure repeatability probe at 4.2 ns |
 | `fmax2-clk2p5` | 2.50 | 0.70 | medium | 0.000 | -1.263 | -28.4 | 90 | -0.115 | 50 | 6,336 | 77.9% | 88,140 | hard-constrained fmax probe at 0.70 util |
 | `fmax2-clk3p0` | 3.00 | 0.70 | medium | 0.000 | -0.836 | -3.6 | 38 | -0.043 | 21 | 5,925 | 75.2% | 85,107 | hard-constrained fmax probe at 0.70 util |
-| `fmax2-clk3p4` | 3.40 | 0.70 | medium | 0.000 | -0.466 | -2.8 | 15 | -0.061 | 27 | 5,698 | 74.4% | 86,889 | hard-constrained fmax probe at 0.70 util |
 | `fmax2-clk3p8` | 3.80 | 0.70 | medium | 0.000 | -0.037 | -0.3 | 25 | -0.015 | 5 | 5,361 | 72.5% | 83,013 | hard-constrained fmax probe at 0.70 util |
+| `confirm-clk4p1-u68-ts06` | 4.10 | 0.68 | medium | 0.060 | 0.007 | 0.0 | 0 | 0.026 | 0 | 5,210 | 70.0% | 88,959 | closure repeatability probe at 4.1 ns, target slack 0.06 ns |
+| `confirm-clk4p1-u69-ts06` | 4.10 | 0.69 | medium | 0.060 | 0.022 | 0.0 | 0 | 0.026 | 0 | 5,215 | 70.6% | 81,419 | closure repeatability probe at 4.1 ns, target slack 0.06 ns |
+| `confirm-clk4p1-u71-ts06` | 4.10 | 0.71 | medium | 0.060 | -0.005 | -0.0 | 1 | 0.025 | 0 | 5,268 | 73.2% | 85,736 | closure repeatability probe at 4.1 ns, target slack 0.06 ns |
+| `confirm-clk4p1-u72-ts06` | 4.10 | 0.72 | medium | 0.060 | 0.036 | 0.0 | 0 | 0.001 | 0 | 5,225 | 73.7% | 81,869 | closure repeatability probe at 4.1 ns, target slack 0.06 ns |
+| `confirm-clk4p0-u68-ts06` | 4.00 | 0.68 | medium | 0.060 | 0.003 | 0.0 | 0 | 0.020 | 0 | 5,303 | 70.6% | 83,302 | closure repeatability probe at 4.0 ns, target slack 0.06 ns |
+| `confirm-clk4p0-u69-ts06` | 4.00 | 0.69 | medium | 0.060 | 0.000 | 0.0 | 0 | 0.022 | 0 | 5,287 | 71.4% | 83,342 | closure repeatability probe at 4.0 ns, target slack 0.06 ns |
+| `confirm-clk4p0-u72-ts06` | 4.00 | 0.72 | medium | 0.060 | 0.002 | 0.0 | 0 | 0.015 | 0 | 5,266 | 74.3% | 87,413 | closure repeatability probe at 4.0 ns, target slack 0.06 ns |
+| `confirm-clk4p0-u71-ts06` | 4.00 | 0.71 | medium | 0.060 | 0.014 | 0.0 | 0 | 0.026 | 0 | 5,319 | 73.9% | 86,520 |  |
+| `fmax2-clk3p4` | 3.40 | 0.70 | medium | 0.000 | -0.466 | -2.8 | 15 | -0.061 | 27 | 5,698 | 74.4% | 86,889 |  |
 
 ## By corner
 
@@ -139,12 +147,36 @@ column against a corner column and never against the table above.
 | `fmax2-clk3p0` | 3.00 | `slow  SS 0.95V 125C` | -0.836 | -3.9 | 42 | -0.469 | 22 |
 |  |  | `typ   TT 1.10V  25C` | 1.269 | 0.0 | 0 | -0.056 | 10 |
 |  |  | `fast  FF 1.25V   0C` | 1.531 | 0.0 | 0 | -0.043 | 21 |
-| `fmax2-clk3p4` | 3.40 | `slow  SS 0.95V 125C` | -0.466 | -2.8 | 15 | -0.247 | 16 |
-|  |  | `typ   TT 1.10V  25C` | 1.589 | 0.0 | 0 | -0.082 | 12 |
-|  |  | `fast  FF 1.25V   0C` | 1.844 | 0.0 | 0 | -0.061 | 27 |
 | `fmax2-clk3p8` | 3.80 | `slow  SS 0.95V 125C` | -0.037 | -0.3 | 25 | -0.004 | 1 |
 |  |  | `typ   TT 1.10V  25C` | 2.017 | 0.0 | 0 | -0.011 | 2 |
 |  |  | `fast  FF 1.25V   0C` | 2.216 | 0.0 | 0 | -0.015 | 5 |
+| `confirm-clk4p1-u68-ts06` | 4.10 | `slow  SS 0.95V 125C` | 0.007 | 0.0 | 0 | 0.210 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.199 | 0.0 | 0 | 0.056 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.404 | 0.0 | 0 | 0.026 | 0 |
+| `confirm-clk4p1-u69-ts06` | 4.10 | `slow  SS 0.95V 125C` | 0.022 | 0.0 | 0 | 0.208 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.213 | 0.0 | 0 | 0.055 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.418 | 0.0 | 0 | 0.026 | 0 |
+| `confirm-clk4p1-u71-ts06` | 4.10 | `slow  SS 0.95V 125C` | -0.005 | -0.0 | 1 | 0.211 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.153 | 0.0 | 0 | 0.055 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.380 | 0.0 | 0 | 0.025 | 0 |
+| `confirm-clk4p1-u72-ts06` | 4.10 | `slow  SS 0.95V 125C` | 0.036 | 0.0 | 0 | 0.106 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.205 | 0.0 | 0 | 0.017 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.421 | 0.0 | 0 | 0.001 | 0 |
+| `confirm-clk4p0-u68-ts06` | 4.00 | `slow  SS 0.95V 125C` | 0.003 | 0.0 | 0 | 0.185 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.192 | 0.0 | 0 | 0.046 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.380 | 0.0 | 0 | 0.020 | 0 |
+| `confirm-clk4p0-u69-ts06` | 4.00 | `slow  SS 0.95V 125C` | 0.000 | 0.0 | 0 | 0.195 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.190 | 0.0 | 0 | 0.050 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.388 | 0.0 | 0 | 0.022 | 0 |
+| `confirm-clk4p0-u72-ts06` | 4.00 | `slow  SS 0.95V 125C` | 0.002 | 0.0 | 0 | 0.173 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.104 | 0.0 | 0 | 0.041 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.326 | 0.0 | 0 | 0.015 | 0 |
+| `confirm-clk4p0-u71-ts06` | 4.00 | `slow  SS 0.95V 125C` | 0.014 | 0.0 | 0 | 0.211 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 2.229 | 0.0 | 0 | 0.056 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 2.401 | 0.0 | 0 | 0.026 | 0 |
+| `fmax2-clk3p4` | 3.40 | `slow  SS 0.95V 125C` | -0.466 | -2.8 | 15 | -0.247 | 16 |
+|  |  | `typ   TT 1.10V  25C` | 1.589 | 0.0 | 0 | -0.082 | 12 |
+|  |  | `fast  FF 1.25V   0C` | 1.844 | 0.0 | 0 | -0.061 | 27 |
 
 ## Stage progression
 
@@ -181,5 +213,13 @@ problem is in synthesis, in placement, in the clock tree or in the routing.
 | `confirm-clk4p2-u72` | -0.018 | 0.003 | -0.017 | -0.021 | 0.020 |
 | `fmax2-clk2p5` | -1.507 | -1.254 | -1.263 | -0.253 | 0.009 |
 | `fmax2-clk3p0` | -0.919 | -0.818 | -0.836 | -0.101 | 0.018 |
-| `fmax2-clk3p4` | -0.565 | -0.456 | -0.466 | -0.109 | 0.010 |
 | `fmax2-clk3p8` | -0.204 | 0.002 | -0.037 | -0.206 | 0.039 |
+| `confirm-clk4p1-u68-ts06` | 0.052 | 0.061 | 0.007 | -0.009 | 0.054 |
+| `confirm-clk4p1-u69-ts06` | 0.044 | 0.030 | 0.022 | 0.014 | 0.008 |
+| `confirm-clk4p1-u71-ts06` | 0.039 | 0.001 | -0.005 | 0.038 | 0.006 |
+| `confirm-clk4p1-u72-ts06` | 0.048 | 0.030 | 0.036 | 0.018 | -0.006 |
+| `confirm-clk4p0-u68-ts06` | 0.026 | 0.018 | 0.003 | 0.008 | 0.015 |
+| `confirm-clk4p0-u69-ts06` | 0.037 | 0.009 | 0.000 | 0.028 | 0.009 |
+| `confirm-clk4p0-u72-ts06` | 0.039 | -0.003 | 0.002 | 0.042 | -0.005 |
+| `confirm-clk4p0-u71-ts06` | -0.018 | 0.008 | 0.014 | -0.026 | -0.006 |
+| `fmax2-clk3p4` | -0.565 | -0.456 | -0.466 | -0.109 | 0.010 |
