@@ -5,6 +5,7 @@
 #   bash sweep.sh fmax             hard-constrained fmax probe, 2.5 to 3.8 ns
 #   bash sweep.sh util 4.1         utilization curve at a 4.1 ns clock
 #   bash sweep.sh confirm 4.1      is a closure at 4.1 ns repeatable?
+#   bash sweep.sh confirm 4.1 0.06 ...with the optimiser told to carry 60 ps
 #
 # A FILE, not a command to paste. Paste into the VNC xterm drops characters,
 # and it has already eaten a "--from" once.
@@ -32,14 +33,24 @@ cd "$(dirname "$0")" || { echo "cannot find the project directory"; exit 1; }
 
 MODE="${1:-}"
 
+# Optimisation margin, in ns, for the modes that take one. 0 is the old
+# behaviour: stop at zero slack. See scripts/innovus.tcl for why this is the
+# knob and clock uncertainty is not.
+TS=0
+
 run_one() {
     local period="$1" util="$2" name="$3" note="$4"
     echo
     echo "##########################################################"
-    echo "### $name   period=$period ns   utilization=$util"
+    echo "### $name   period=$period ns   utilization=$util   tgtslk=$TS ns"
     echo "##########################################################"
     date
-    ./run.sh --period "$period" --util "$util" --name "$name" --note "$note"
+    if [ "$TS" = "0" ]; then
+        ./run.sh --period "$period" --util "$util" --name "$name" --note "$note"
+    else
+        ./run.sh --period "$period" --util "$util" --name "$name" --note "$note" \
+                 --target-slack "$TS"
+    fi
 }
 
 case "$MODE" in
@@ -124,10 +135,20 @@ case "$MODE" in
     # run. All closing means the closure is real. A scatter across zero means
     # the design sits on the boundary and a single run cannot be quoted.
     PERIOD="${2:-}"
-    [ -n "$PERIOD" ] || { echo "usage: bash sweep.sh confirm <period>"; exit 1; }
+    TS="${3:-0}"
+    [ -n "$PERIOD" ] || { echo "usage: bash sweep.sh confirm <period> [target-slack]"; exit 1; }
+
+    # THE RUN NAME HAS TO CARRY THE MARGIN. results/confirm-clk4p1-u68 and its
+    # three siblings are the committed evidence of the 1-in-6 probe of 11 Aug.
+    # Re-running this mode under the same four names rebuilds runs/ and then
+    # archives over results/, and the measurement that established the 26 ps
+    # route cost would be gone with no diff to notice it by.
+    TSTAG=""
+    [ "$TS" = "0" ] || TSTAG="-ts$(echo "$TS" | sed 's/^0\.//')"
+
     for u in 0.68 0.69 0.71 0.72; do
-        run_one "$PERIOD" "$u" "confirm-clk$(echo "$PERIOD" | tr '.' 'p')-u$(echo "$u" | tr -d '0.')" \
-                "closure repeatability probe at $PERIOD ns"
+        run_one "$PERIOD" "$u" "confirm-clk$(echo "$PERIOD" | tr '.' 'p')-u$(echo "$u" | tr -d '0.')$TSTAG" \
+                "closure repeatability probe at $PERIOD ns, target slack $TS ns"
     done
     ;;
 
@@ -135,7 +156,8 @@ case "$MODE" in
     echo "usage:"
     echo "   bash sweep.sh fmax             four runs, 2.5 to 3.8 ns, read ACHIEVED delay"
     echo "   bash sweep.sh util <period>    four runs, 0.60 to 0.85 utilization"
-    echo "   bash sweep.sh confirm <period> four runs at 0.68 to 0.72, a noise probe"
+    echo "   bash sweep.sh confirm <period> [target-slack]"
+    echo "                                  four runs at 0.68 to 0.72, a noise probe"
     exit 1
     ;;
 esac

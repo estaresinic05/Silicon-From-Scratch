@@ -102,6 +102,13 @@ if {[info exists env(WRITE_ARTIFACTS)]} {
     set WRITE_ARTIFACTS 0
 }
 
+# Margin the optimiser must carry, in ns. 0 is the old behaviour exactly.
+if {[info exists env(TARGET_SLACK)]} {
+    set TARGET_SLACK $env(TARGET_SLACK)
+} else {
+    set TARGET_SLACK 0
+}
+
 file mkdir enc
 file mkdir reports
 
@@ -198,6 +205,68 @@ if {[run_from floorplan]} {
 setAnalysisMode -analysisType onChipVariation -cppr both
 setDesignMode -process 45
 setDesignMode -topRoutingLayer 10 -bottomRoutingLayer 2
+
+#--------------------------------------------------------------------------
+# Optimisation target slack
+#
+# THIS IS NOT A TIMING CONSTRAINT, and that is the whole point of it.
+#
+# The design lands about 26 ps short at 4.1 ns. After CTS it is POSITIVE in
+# ten runs out of ten, mean +0.003; detailed routing then reveals wire delay
+# the optimiser never modelled, mean +0.026 with sigma 0.016. Landing 26 ps
+# short with 16 ps of scatter crosses zero about one run in six, which is the
+# 1-in-6 closure rate the repeatability probe measured independently.
+#
+# THE OBVIOUS FIX DOES NOT WORK. Raising setup clock uncertainty so the
+# pre-route optimiser carries the route cost as margin is self-cancelling
+# here, because there is ONE constraint mode, CON, and it is active for the
+# final analysis as well as for optimisation. Thirty picoseconds of extra
+# uncertainty moves the optimiser's target down by 30 ps and the signoff
+# requirement down by the same 30 ps, and the slack comes out where it
+# started. It is arithmetically identical to shortening the period, and this
+# project has already measured what that buys: 4.1 and 4.2 ns came back at
+# mean -23 and -22 ps, so 100 ps of period was worth 1 ps of slack.
+#
+# setOptMode moves where the optimiser STOPS without moving the ruler it is
+# judged by. Post-CTS stopping at +0.003 was never the optimiser running out
+# of road: it had roughly 170 ps of headroom down to the 3.83 ns floor and
+# stopped because it had met its target. Ask for more and it keeps going.
+#
+# SIZING. 0.030 buys the mean route cost and lands near +0.004, which still
+# closes about half the time because the run-to-run sigma is 19 ps. 0.060 is
+# the mean plus about two sigma, and is the difference between "it closed"
+# and "it closes". It is paid for in area and runtime.
+#
+# Outside every run_from guard on purpose: a resumed run optimises too, and a
+# margin that only applied to a full run would silently vanish from -from place.
+#--------------------------------------------------------------------------
+if {$TARGET_SLACK != 0} {
+    # AN OPTION INNOVUS DOES NOT KNOW CAN WARN AND RETURN SUCCESS. That is
+    # exactly how `timeDesign -postRoute -si` got recorded as a step that ran:
+    # it printed IMPOPT-7017, did nothing, and exited zero. So each option is
+    # set and then READ BACK, and the run refuses to start if none of them took
+    # rather than building with no margin under a name that claims it has one.
+    set TS_OK {}
+    foreach opt {setupTargetSlack postRouteSetupTargetSlack} {
+        if {[catch {setOptMode -$opt $TARGET_SLACK} msg]} {
+            puts "### setOptMode -$opt REFUSED: $msg"
+            continue
+        }
+        if {[catch {getOptMode -$opt} got]} { set got "(unreadable)" }
+        puts "### setOptMode -$opt -> $got"
+        lappend TS_OK $opt
+    }
+    if {[llength $TS_OK] == 0} {
+        puts "### ####################################################"
+        puts "### TARGET_SLACK=$TARGET_SLACK requested and NO setOptMode option took it."
+        puts "### Refusing to build: the run would be named for a margin it does not have."
+        puts "### ####################################################"
+        exit 1
+    }
+    puts "### optimisation target slack $TARGET_SLACK ns via: $TS_OK"
+} else {
+    puts "### optimisation target slack 0 (stop at zero, the old behaviour)"
+}
 
 #--------------------------------------------------------------------------
 # 2. Floorplan

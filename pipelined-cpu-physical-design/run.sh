@@ -6,6 +6,7 @@
 #   ./run.sh --period 2.5 --note "tighten"   full flow at 2.5 ns
 #   ./run.sh --period 4.0 --util 0.80        ...at 80% core utilization
 #   ./run.sh --period 4.1 --effort high      ...synthesise at high effort
+#   ./run.sh --period 4.1 --target-slack 0.06  ...optimise to +60 ps, not to 0
 #   ./run.sh --period 4.0 --artifacts        ...also write DEF, netlist, SDF, GDS
 #   ./run.sh --name baseline --note "..."    name the run yourself
 #   ./run.sh --name baseline --from cts      resume an existing run at CTS
@@ -61,6 +62,10 @@ done
 PERIOD=3.0
 UTIL=0.70
 EFFORT=medium
+# Margin the optimiser must carry, in ns. 0 is every run before 2026-08-12.
+# See the long note in scripts/innovus.tcl for why this is not clock uncertainty.
+TARGET_SLACK=0
+TS_EXPLICIT=0
 ARTIFACTS=0
 NAME=""
 FROM="syn"
@@ -77,7 +82,7 @@ usage() {
     # The line range is the comment block at the top of this file. It moves
     # whenever that block grows, and nothing catches it but reading the output,
     # so `./run.sh --help` is worth an eye after editing the header.
-    sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -789,6 +794,7 @@ while [ $# -gt 0 ]; do
         --period) PERIOD="$2"; shift 2 ;;
         --util)   UTIL="$2";   shift 2 ;;
         --effort) EFFORT="$2"; shift 2 ;;
+        --target-slack) TARGET_SLACK="$2"; TS_EXPLICIT=1; shift 2 ;;
         --artifacts) ARTIFACTS=1; shift ;;
         --name)   NAME="$2";   shift 2 ;;
         --from)   FROM="$2";   shift 2 ;;
@@ -812,6 +818,20 @@ case "$EFFORT" in
     *) echo "--effort must be low, medium or high"; exit 1 ;;
 esac
 
+# THE UNITS TRAP. This knob is in NANOSECONDS and the quantity being reasoned
+# about is picoseconds, so --target-slack 60 asks for 60 ns of margin on a
+# 4.1 ns clock. Innovus would accept that and spend a quarter of an hour
+# discovering it is unbuildable. Anything above a tenth of the period is a
+# typo, not an experiment, and is refused here for the price of a second.
+awk -v t="$TARGET_SLACK" -v p="$PERIOD" 'BEGIN{
+    if (t !~ /^[0-9]+(\.[0-9]+)?$/) exit 1
+    exit !(t + 0 <= 0.1 * p)
+}' || {
+    echo "--target-slack '$TARGET_SLACK' must be a number in NANOSECONDS,"
+    echo "between 0 and a tenth of the $PERIOD ns clock. 60 ps is 0.06, not 60."
+    exit 1
+}
+
 # The two corner knobs are separate on purpose, because they answer different
 # questions and changing both at once answers neither. --timing alone, on a
 # netlist that already exists, measures what the corner costs. Adding
@@ -833,11 +853,13 @@ if [ -z "$NAME" ]; then
     NAME="clk$(echo "$PERIOD" | tr '.' 'p')"
     [ "$UTIL" = "0.70" ] || NAME="${NAME}_u$(echo "$UTIL" | tr -d '0.')"
     [ "$EFFORT" = "medium" ] || NAME="${NAME}_e${EFFORT}"
+    [ "$TARGET_SLACK" = "0" ] || NAME="${NAME}_ts$(echo "$TARGET_SLACK" | sed 's/^0\.//')"
 fi
 
 export CLK_PERIOD="$PERIOD"
 export CORE_UTIL="$UTIL"
 export SYN_EFFORT="$EFFORT"
+export TARGET_SLACK="$TARGET_SLACK"
 export WRITE_ARTIFACTS="$ARTIFACTS"
 
 RUNDIR="$ROOT/runs/$NAME"
@@ -858,8 +880,12 @@ if [ "$FROM" = "syn" ]; then
     printf 'CLK_PERIOD=%s
 CORE_UTIL=%s
 SYN_EFFORT=%s
-' "$PERIOD" "$UTIL" "$EFFORT" > RUN.env
+TARGET_SLACK=%s
+' "$PERIOD" "$UTIL" "$EFFORT" "$TARGET_SLACK" > RUN.env
 elif [ -f RUN.env ]; then
+    # Sourcing overwrites the shell's copy of anything RUN.env names, so the
+    # command line's value has to be saved before it happens.
+    _TS_CLI="$TARGET_SLACK"
     . ./RUN.env
     PERIOD="$CLK_PERIOD"
     export CLK_PERIOD
@@ -869,6 +895,23 @@ elif [ -f RUN.env ]; then
     # would survive as the record of what was built.
     if [ -n "${SYN_EFFORT:-}" ]; then EFFORT="$SYN_EFFORT"; fi
     export SYN_EFFORT="$EFFORT"
+
+    # Target slack is the other way round, because unlike synthesis effort it
+    # is re-applied every time the optimiser runs and --from place or cts DOES
+    # re-optimise. So an explicit --target-slack on a resume is a real
+    # experiment and wins, and silently ignoring it would be the worse bug.
+    # RUN.env is corrected when it does, because that file is what qor.py reads
+    # to label the row, and a row labelled with the margin the run no longer
+    # has is how a wrong number outlives the session that produced it.
+    TARGET_SLACK="${TARGET_SLACK:-0}"
+    if [ "$TS_EXPLICIT" = "1" ] && [ "$_TS_CLI" != "$TARGET_SLACK" ]; then
+        echo "NOTE: --target-slack $_TS_CLI overrides the $TARGET_SLACK in RUN.env."
+        TARGET_SLACK="$_TS_CLI"
+        grep -v '^TARGET_SLACK=' RUN.env > RUN.env.tmp || true
+        printf 'TARGET_SLACK=%s\n' "$TARGET_SLACK" >> RUN.env.tmp
+        mv RUN.env.tmp RUN.env
+    fi
+    export TARGET_SLACK
 fi
 
 echo "=================================================================="
@@ -876,6 +919,7 @@ echo " run     $NAME"
 echo " clock   $PERIOD ns"
 echo " util    $UTIL"
 echo " effort  $EFFORT"
+echo " tgtslk  $TARGET_SLACK ns"
 echo " from    $FROM"
 echo " dir     $RUNDIR"
 echo "=================================================================="

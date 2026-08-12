@@ -7,38 +7,38 @@ Slacks are nanoseconds, worst path, post-route unless the column says
 otherwise. A negative setup WNS means the run did not make timing at
 that clock. Frozen reports for every run are in `results/<run>/reports/`.
 
-| Run | Clk | Util | Effort | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |
-|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `06-clk3p9` | 3.90 | 0.70 | medium | -0.066 | -1.3 | 45 | 0.011 | 0 | 8,148 | 82.7% | 93,039 | three-corner re-report |
-| `04-mmmc-analysis` | 2.80 | 0.70 | medium | -0.968 | -82.8 | 362 | -0.155 | 50 | 6,752 | 85.1% | 84,689 | three-corner re-report |
-| `05-mmmc-full` | 2.80 | 0.70 | medium | -1.060 | -89.2 | 541 | -0.083 | 14 | 7,305 | 78.3% | 85,240 | three-corner re-report |
-| `00-baseline` | 3.00 | 0.70 | medium | 0.009 | - | 0 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
-| `01-split-uncertainty` | 3.00 | 0.70 | medium | 0.009 | - | 0 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
-| `02-clk2p8` | 2.80 | 0.70 | medium | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
-| `03-ring-fix` | 2.80 | 0.70 | medium | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | ring spacing 1.5um, clears the four MetSpc violations |
-| `fmax-clk3p9` | 3.90 | 0.70 | medium | -0.039 | -0.3 | 30 | 0.021 | 0 | 8,497 | 78.9% | 106,281 | fmax sweep at 0.70 util |
-| `fmax-clk4p0` | 4.00 | 0.70 | medium | -0.045 | -1.4 | 63 | 0.027 | 0 | 9,592 | 76.9% | 106,596 | fmax sweep at 0.70 util |
-| `fmax-clk4p1` | 4.10 | 0.70 | medium | -0.015 | -0.0 | 7 | 0.021 | 0 | 9,147 | 74.4% | 98,342 | fmax sweep at 0.70 util |
-| `fmax-clk4p3` | 4.30 | 0.70 | medium | -0.029 | -0.3 | 29 | 0.024 | 0 | 7,575 | 74.6% | 93,904 | fmax sweep at 0.70 util |
-| `07-rfreset` | 3.90 | 0.70 | medium | -0.039 | -0.3 | 30 | 0.021 | 0 | 8,497 | 78.9% | 106,281 | register file reset in RTL; slow WNS -0.066 to -0.039, viol 45 to 30 |
-| `clk4p1_ehigh` | 4.10 | 0.70 | high | -0.013 | -0.1 | 12 | 0.030 | 0 | 8,733 | 75.6% | 99,868 | high effort at the best sweep point |
-| `08-bypass` | 4.10 | 0.70 | high | -0.044 | -0.2 | 8 | 0.026 | 0 | 4,931 | 71.4% | 82,503 | RF write on posedge with write-forward bypass |
-| `util6-clk4p1` | 4.10 | 0.60 | medium | -0.012 | -0.1 | 14 | 0.026 | 0 | 5,170 | 61.4% | 80,701 | utilization sweep at 4.1 ns |
-| `util7-clk4p1` | 4.10 | 0.70 | medium | 0.003 | 0.0 | 0 | 0.016 | 0 | 5,197 | 71.7% | 85,001 | utilization sweep at 4.1 ns |
-| `util8-clk4p1` | 4.10 | 0.80 | medium | -0.041 | -0.5 | 26 | 0.018 | 0 | 5,217 | 81.9% | 81,279 | utilization sweep at 4.1 ns |
-| `util85-clk4p1` | 4.10 | 0.85 | medium | -0.040 | -0.1 | 9 | 0.019 | 0 | 5,193 | 87.0% | 83,555 | utilization sweep at 4.1 ns |
-| `confirm-clk4p1-u68` | 4.10 | 0.68 | medium | -0.016 | -0.0 | 3 | 0.026 | 0 | 5,196 | 69.8% | 88,776 | closure repeatability probe at 4.1 ns |
-| `confirm-clk4p1-u69` | 4.10 | 0.69 | medium | -0.010 | -0.0 | 3 | 0.015 | 0 | 5,237 | 70.7% | 80,882 | closure repeatability probe at 4.1 ns |
-| `confirm-clk4p1-u71` | 4.10 | 0.71 | medium | -0.042 | -0.1 | 14 | 0.024 | 0 | 5,196 | 72.6% | 86,140 | closure repeatability probe at 4.1 ns |
-| `confirm-clk4p1-u72` | 4.10 | 0.72 | medium | -0.029 | -0.1 | 3 | 0.018 | 0 | 5,193 | 73.6% | 82,184 | closure repeatability probe at 4.1 ns |
-| `confirm-clk4p2-u68` | 4.20 | 0.68 | medium | -0.022 | -0.4 | 41 | 0.027 | 0 | 5,177 | 69.8% | 87,910 | closure repeatability probe at 4.2 ns |
-| `confirm-clk4p2-u69` | 4.20 | 0.69 | medium | -0.020 | -0.1 | 9 | 0.025 | 0 | 5,159 | 70.8% | 87,777 | closure repeatability probe at 4.2 ns |
-| `confirm-clk4p2-u71` | 4.20 | 0.71 | medium | -0.030 | -0.3 | 39 | 0.027 | 0 | 5,182 | 73.0% | 87,460 | closure repeatability probe at 4.2 ns |
-| `confirm-clk4p2-u72` | 4.20 | 0.72 | medium | -0.017 | -0.0 | 7 | 0.027 | 0 | 5,130 | 73.8% | 86,935 | closure repeatability probe at 4.2 ns |
-| `fmax2-clk2p5` | 2.50 | 0.70 | medium | -1.263 | -28.4 | 90 | -0.115 | 50 | 6,336 | 77.9% | 88,140 | hard-constrained fmax probe at 0.70 util |
-| `fmax2-clk3p0` | 3.00 | 0.70 | medium | -0.836 | -3.6 | 38 | -0.043 | 21 | 5,925 | 75.2% | 85,107 | hard-constrained fmax probe at 0.70 util |
-| `fmax2-clk3p4` | 3.40 | 0.70 | medium | -0.466 | -2.8 | 15 | -0.061 | 27 | 5,698 | 74.4% | 86,889 | hard-constrained fmax probe at 0.70 util |
-| `fmax2-clk3p8` | 3.80 | 0.70 | medium | -0.037 | -0.3 | 25 | -0.015 | 5 | 5,361 | 72.5% | 83,013 | hard-constrained fmax probe at 0.70 util |
+| Run | Clk | Util | Effort | TgtSlk | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |
+|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `06-clk3p9` | 3.90 | 0.70 | medium | 0.000 | -0.066 | -1.3 | 45 | 0.011 | 0 | 8,148 | 82.7% | 93,039 | three-corner re-report |
+| `04-mmmc-analysis` | 2.80 | 0.70 | medium | 0.000 | -0.968 | -82.8 | 362 | -0.155 | 50 | 6,752 | 85.1% | 84,689 | three-corner re-report |
+| `05-mmmc-full` | 2.80 | 0.70 | medium | 0.000 | -1.060 | -89.2 | 541 | -0.083 | 14 | 7,305 | 78.3% | 85,240 | three-corner re-report |
+| `00-baseline` | 3.00 | 0.70 | medium | 0.000 | 0.009 | - | 0 | -0.014 | 10 | 4,321 | 69.7% | 79,481 | first clean end-to-end pass; clock uncertainty not yet split |
+| `01-split-uncertainty` | 3.00 | 0.70 | medium | 0.000 | 0.009 | - | 0 | 0.066 | 0 | 4,321 | 69.7% | 79,481 | hold uncertainty split: setup 0.10, hold 0.02; clears the ten phantom violations |
+| `02-clk2p8` | 2.80 | 0.70 | medium | 0.000 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | clock tightened to 2.8 ns, 357 MHz; closes post-route with 2 ps and no violations |
+| `03-ring-fix` | 2.80 | 0.70 | medium | 0.000 | 0.002 | - | 0 | 0.066 | 0 | 4,332 | 69.7% | 73,127 | ring spacing 1.5um, clears the four MetSpc violations |
+| `fmax-clk3p9` | 3.90 | 0.70 | medium | 0.000 | -0.039 | -0.3 | 30 | 0.021 | 0 | 8,497 | 78.9% | 106,281 | fmax sweep at 0.70 util |
+| `fmax-clk4p0` | 4.00 | 0.70 | medium | 0.000 | -0.045 | -1.4 | 63 | 0.027 | 0 | 9,592 | 76.9% | 106,596 | fmax sweep at 0.70 util |
+| `fmax-clk4p1` | 4.10 | 0.70 | medium | 0.000 | -0.015 | -0.0 | 7 | 0.021 | 0 | 9,147 | 74.4% | 98,342 | fmax sweep at 0.70 util |
+| `fmax-clk4p3` | 4.30 | 0.70 | medium | 0.000 | -0.029 | -0.3 | 29 | 0.024 | 0 | 7,575 | 74.6% | 93,904 | fmax sweep at 0.70 util |
+| `07-rfreset` | 3.90 | 0.70 | medium | 0.000 | -0.039 | -0.3 | 30 | 0.021 | 0 | 8,497 | 78.9% | 106,281 | register file reset in RTL; slow WNS -0.066 to -0.039, viol 45 to 30 |
+| `clk4p1_ehigh` | 4.10 | 0.70 | high | 0.000 | -0.013 | -0.1 | 12 | 0.030 | 0 | 8,733 | 75.6% | 99,868 | high effort at the best sweep point |
+| `08-bypass` | 4.10 | 0.70 | high | 0.000 | -0.044 | -0.2 | 8 | 0.026 | 0 | 4,931 | 71.4% | 82,503 | RF write on posedge with write-forward bypass |
+| `util6-clk4p1` | 4.10 | 0.60 | medium | 0.000 | -0.012 | -0.1 | 14 | 0.026 | 0 | 5,170 | 61.4% | 80,701 | utilization sweep at 4.1 ns |
+| `util7-clk4p1` | 4.10 | 0.70 | medium | 0.000 | 0.003 | 0.0 | 0 | 0.016 | 0 | 5,197 | 71.7% | 85,001 | utilization sweep at 4.1 ns |
+| `util8-clk4p1` | 4.10 | 0.80 | medium | 0.000 | -0.041 | -0.5 | 26 | 0.018 | 0 | 5,217 | 81.9% | 81,279 | utilization sweep at 4.1 ns |
+| `util85-clk4p1` | 4.10 | 0.85 | medium | 0.000 | -0.040 | -0.1 | 9 | 0.019 | 0 | 5,193 | 87.0% | 83,555 | utilization sweep at 4.1 ns |
+| `confirm-clk4p1-u68` | 4.10 | 0.68 | medium | 0.000 | -0.016 | -0.0 | 3 | 0.026 | 0 | 5,196 | 69.8% | 88,776 | closure repeatability probe at 4.1 ns |
+| `confirm-clk4p1-u69` | 4.10 | 0.69 | medium | 0.000 | -0.010 | -0.0 | 3 | 0.015 | 0 | 5,237 | 70.7% | 80,882 | closure repeatability probe at 4.1 ns |
+| `confirm-clk4p1-u71` | 4.10 | 0.71 | medium | 0.000 | -0.042 | -0.1 | 14 | 0.024 | 0 | 5,196 | 72.6% | 86,140 | closure repeatability probe at 4.1 ns |
+| `confirm-clk4p1-u72` | 4.10 | 0.72 | medium | 0.000 | -0.029 | -0.1 | 3 | 0.018 | 0 | 5,193 | 73.6% | 82,184 | closure repeatability probe at 4.1 ns |
+| `confirm-clk4p2-u68` | 4.20 | 0.68 | medium | 0.000 | -0.022 | -0.4 | 41 | 0.027 | 0 | 5,177 | 69.8% | 87,910 | closure repeatability probe at 4.2 ns |
+| `confirm-clk4p2-u69` | 4.20 | 0.69 | medium | 0.000 | -0.020 | -0.1 | 9 | 0.025 | 0 | 5,159 | 70.8% | 87,777 | closure repeatability probe at 4.2 ns |
+| `confirm-clk4p2-u71` | 4.20 | 0.71 | medium | 0.000 | -0.030 | -0.3 | 39 | 0.027 | 0 | 5,182 | 73.0% | 87,460 | closure repeatability probe at 4.2 ns |
+| `confirm-clk4p2-u72` | 4.20 | 0.72 | medium | 0.000 | -0.017 | -0.0 | 7 | 0.027 | 0 | 5,130 | 73.8% | 86,935 | closure repeatability probe at 4.2 ns |
+| `fmax2-clk2p5` | 2.50 | 0.70 | medium | 0.000 | -1.263 | -28.4 | 90 | -0.115 | 50 | 6,336 | 77.9% | 88,140 | hard-constrained fmax probe at 0.70 util |
+| `fmax2-clk3p0` | 3.00 | 0.70 | medium | 0.000 | -0.836 | -3.6 | 38 | -0.043 | 21 | 5,925 | 75.2% | 85,107 | hard-constrained fmax probe at 0.70 util |
+| `fmax2-clk3p4` | 3.40 | 0.70 | medium | 0.000 | -0.466 | -2.8 | 15 | -0.061 | 27 | 5,698 | 74.4% | 86,889 | hard-constrained fmax probe at 0.70 util |
+| `fmax2-clk3p8` | 3.80 | 0.70 | medium | 0.000 | -0.037 | -0.3 | 25 | -0.015 | 5 | 5,361 | 72.5% | 83,013 | hard-constrained fmax probe at 0.70 util |
 
 ## By corner
 

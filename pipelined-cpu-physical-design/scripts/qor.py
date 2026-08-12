@@ -55,7 +55,7 @@ KEEP += ["41_hold_%s.rpt" % t for t in CORNERS]
 # because those were signed off at typical and the slow column is the penalty
 # they were never judged by.
 FIELDS = [
-    "run", "note", "clk_ns", "util", "effort", "date",
+    "run", "note", "clk_ns", "util", "effort", "target_slack", "date",
     "wns_place", "wns_cts", "wns_hold_cts", "wns_setup", "wns_hold",
     "n_setup_viol", "n_hold_viol", "tns_setup",
     "cells", "fillers", "flops",
@@ -396,6 +396,30 @@ def parse_effort(run_dir):
     return "medium"
 
 
+def parse_target_slack(run_dir):
+    """
+    The optimisation margin the run was BUILT with, out of RUN.env.
+
+    Every run before 2026-08-12 optimised to zero, which was the only
+    behaviour there was, so an absent line reads back as 0.0 exactly as
+    parse_effort reads an absent line back as medium.
+
+    This column is not decoration. Two runs at the same period, utilization
+    and effort that differ only in target slack are otherwise identical in
+    the table, and the whole reason for building the second one is that it
+    should NOT be identical.
+    """
+    text = _read(Path(run_dir) / "RUN.env")
+    if text:
+        m = re.search(r"TARGET_SLACK=([0-9.]+)", text)
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                pass
+    return 0.0
+
+
 def parse_clock(run_dir):
     """
     Clock period out of the SDC Genus wrote, which is the one Innovus used.
@@ -488,6 +512,7 @@ def parse_run(run_dir):
     row["clk_ns"] = parse_clock(run_dir)
     row["util"] = parse_util(run_dir)
     row["effort"] = parse_effort(run_dir)
+    row["target_slack"] = parse_target_slack(run_dir)
     row["date"] = _gen_date(rpt / "44_summary.rpt") or ""
 
     return {k: ("" if v is None else v) for k, v in row.items()}
@@ -634,17 +659,20 @@ def write_markdown(rows, md_path):
     # 50 setup and exactly 50 hold, which was -max_paths 50 and not a count.
     # The true figure was 362 failing paths and -82.8 ns of TNS.
     head = (
-        "| Run | Clk | Util | Effort | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
-        "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
+        "| Run | Clk | Util | Effort | TgtSlk | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
+        "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
     )
     lines = []
     for r in rows:
         lines.append(
-            "| `{run}` | {clk} | {util} | {eff} | {ws} | {ts} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
+            "| `{run}` | {clk} | {util} | {eff} | {tgt} | {ws} | {ts} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
                 run=r.get("run", "?"),
                 clk=_fmt(r.get("clk_ns"), 2),
                 util=_fmt(r.get("util"), 2),
                 eff=r.get("effort") or "medium",
+                # 0 is a result, not missing data: it says this run stopped at
+                # zero slack, which is what every run before 2026-08-12 did.
+                tgt=_fmt(r.get("target_slack") or 0, 3),
                 ws=_fmt(r.get("wns_setup")),
                 ts=_fmt(r.get("tns_setup"), 1),
                 ns=_viol(r.get("n_setup_viol")),
