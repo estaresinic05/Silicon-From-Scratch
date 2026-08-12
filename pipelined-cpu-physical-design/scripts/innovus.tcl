@@ -240,30 +240,45 @@ setDesignMode -topRoutingLayer 10 -bottomRoutingLayer 2
 # Outside every run_from guard on purpose: a resumed run optimises too, and a
 # margin that only applied to a full run would silently vanish from -from place.
 #--------------------------------------------------------------------------
+# THE OPTION NAME, established by probe on 2026-08-12 against Innovus
+# 23.12-s091_1. `setOptMode -help` on this build lists only the Common UI
+# spellings, and the one that exists is
+#
+#     [-opt_setup_target_slack <SLACK>]
+#
+# There is NO post-route variant of it. `-postRouteSetupTargetSlack` came back
+# IMPTCM-48, "not a legal option", and the nearest thing in the usage list is
+# `-opt_post_route_setup_recovery <ENUM>`, which is area recovery and a
+# different knob. One target slack governs optimisation including route_opt, so
+# one is what gets set. The legacy camelCase `-setupTargetSlack` is kept as a
+# second candidate because it parsed on this build, but the documented name is
+# tried first and wins.
+#
+# AN OPTION INNOVUS DOES NOT KNOW CAN WARN AND RETURN SUCCESS. That is exactly
+# how `timeDesign -postRoute -si` got recorded as a step that ran: it printed
+# IMPOPT-7017, did nothing, and exited zero. So the option is set and then READ
+# BACK, and the run refuses to start rather than build with no margin under a
+# name that claims it has one.
 if {$TARGET_SLACK != 0} {
-    # AN OPTION INNOVUS DOES NOT KNOW CAN WARN AND RETURN SUCCESS. That is
-    # exactly how `timeDesign -postRoute -si` got recorded as a step that ran:
-    # it printed IMPOPT-7017, did nothing, and exited zero. So each option is
-    # set and then READ BACK, and the run refuses to start if none of them took
-    # rather than building with no margin under a name that claims it has one.
-    set TS_OK {}
-    foreach opt {setupTargetSlack postRouteSetupTargetSlack} {
+    set TS_OK ""
+    foreach opt {opt_setup_target_slack setupTargetSlack} {
         if {[catch {setOptMode -$opt $TARGET_SLACK} msg]} {
             puts "### setOptMode -$opt REFUSED: $msg"
             continue
         }
         if {[catch {getOptMode -$opt} got]} { set got "(unreadable)" }
         puts "### setOptMode -$opt -> $got"
-        lappend TS_OK $opt
+        set TS_OK $opt
+        break
     }
-    if {[llength $TS_OK] == 0} {
+    if {$TS_OK eq ""} {
         puts "### ####################################################"
         puts "### TARGET_SLACK=$TARGET_SLACK requested and NO setOptMode option took it."
         puts "### Refusing to build: the run would be named for a margin it does not have."
         puts "### ####################################################"
         exit 1
     }
-    puts "### optimisation target slack $TARGET_SLACK ns via: $TS_OK"
+    puts "### optimisation target slack $TARGET_SLACK ns via -$TS_OK"
 } else {
     puts "### optimisation target slack 0 (stop at zero, the old behaviour)"
 }

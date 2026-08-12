@@ -1,30 +1,44 @@
 #############################################################################
-# Does this Innovus have a target-slack knob, and what is it called?
+# Which target-slack option does this Innovus actually have?
 #
+#     cd $PNR_ROOT
 #     innovus -nowin -files scripts/probe_optmode.tcl
 #
 # Author: Elliot Staresinic
 #
-# A minute, no design loaded, nothing routed. It answers the one question that
-# would otherwise cost a full synthesis to ask, because the guard in
-# innovus.tcl that refuses a run with no margin fires AFTER Genus has finished.
-# Four runs at 13 to 17 minutes each is an hour; finding out first is cheap.
+# A minute, no design, no route. It exists because the guard in innovus.tcl
+# that refuses a run with no margin fires AFTER Genus, so a wrong option name
+# costs a full synthesis per run to discover, and a sweep is four of them.
 #
 # WHY A FILE AND NOT A PASTED COMMAND. Pasting into the VNC xterm drops
-# characters, and it has already eaten a "--from" once. Same reason sweep.sh
-# lives in the repo.
+# characters and breaks long lines at the wrap. The first attempt at this probe
+# was a 100-character one-liner and the xterm split it in two, so `-files`
+# arrived with no argument and bash then tried to execute the .tcl directly.
+# Keep the invocation under about 50 characters. Same reason sweep.sh exists.
 #
-# WHAT IT IS CHECKING. setOptMode raises the slack at which the optimiser
-# STOPS, without touching the constraint it is judged by. That distinction is
-# the whole reason the margin is not being added to clock uncertainty instead:
-# there is one constraint mode here, it is active for the final analysis too,
-# and margin added there moves the ruler along with the target. The long
-# version of the argument is in scripts/innovus.tcl.
+# READ THE ERROR CODE, NOT THE PASS/FAIL. That is the whole lesson of the first
+# run of this probe, 2026-08-12, which reported NOT SUPPORTED for an option
+# that was fine. setOptMode fails two completely different ways here and only
+# one of them is fatal:
 #
-# AN OPTION INNOVUS DOES NOT KNOW CAN WARN AND RETURN SUCCESS. That is exactly
-# how `timeDesign -postRoute -si` got recorded as a step that ran: it printed
-# IMPOPT-7017, did nothing, and exited zero. So every option here is set and
-# then READ BACK, and only a value that comes back is treated as supported.
+#   IMPTCM-48   "... is not a legal option for command setOptMode"
+#               The option does not exist. Fatal. Argument parsing rejected it.
+#
+#   IMPOPT-581  "Design not in memory."
+#               The option PARSED and the command got as far as needing a
+#               design, which this probe deliberately does not load. NOT fatal:
+#               in innovus.tcl the call sits after init_design/restoreDesign,
+#               so a design is always in memory by then.
+#
+# Innovus writes both of those to stdout itself rather than into the Tcl error
+# message, so `catch` comes back with an empty string and this script CANNOT
+# classify them for you. It prints what it can and tells you what to look for.
+# Do not let it hand you a binary verdict it has not earned.
+#
+# WHAT WAS FOUND on 23.12-s091_1: `setOptMode -help` lists only Common UI
+# spellings and the real one is -opt_setup_target_slack. There is no post-route
+# variant; -postRouteSetupTargetSlack is IMPTCM-48, and the nearest entry,
+# -opt_post_route_setup_recovery, is area recovery and a different knob.
 #############################################################################
 
 set PROBE 0.06
@@ -32,33 +46,44 @@ set PROBE 0.06
 puts ""
 puts "### ####################################################"
 puts "### setOptMode target-slack probe, asking for $PROBE ns"
+puts "###"
+puts "### Innovus prints its own error ABOVE each result line."
+puts "###   IMPTCM-48  = no such option        -> fatal, wrong name"
+puts "###   IMPOPT-581 = option parsed, wants a design -> FINE, the flow has one"
 puts "### ####################################################"
-
-set SUPPORTED {}
-foreach opt {setupTargetSlack postRouteSetupTargetSlack holdTargetSlack} {
-    if {[catch {setOptMode -$opt $PROBE} msg]} {
-        puts [format "%-28s NOT ACCEPTED   %s" $opt $msg]
-        continue
-    }
-    if {[catch {getOptMode -$opt} got]} {
-        puts [format "%-28s set, UNREADABLE  %s" $opt $got]
-        continue
-    }
-    puts [format "%-28s -> %s" $opt $got]
-    lappend SUPPORTED $opt
-}
-
 puts ""
-if {[lsearch $SUPPORTED setupTargetSlack] >= 0} {
-    puts "### setupTargetSlack IS SUPPORTED. The flow will work as written:"
-    puts "###     bash sweep.sh confirm 4.1 0.06"
-} else {
-    puts "### setupTargetSlack IS NOT SUPPORTED under this Innovus."
-    puts "### DO NOT start the sweep. innovus.tcl will refuse every run, but"
-    puts "### only after Genus has spent its minutes. The margin needs another"
-    puts "### knob; report this output before changing anything."
+
+foreach opt {opt_setup_target_slack setupTargetSlack
+             opt_hold_target_slack postRouteSetupTargetSlack} {
+    puts "--- trying -$opt"
+    if {[catch {setOptMode -$opt $PROBE} msg]} {
+        set detail $msg
+        if {$detail eq ""} { set detail "(Innovus printed it above; read the code)" }
+        puts [format "%-28s RAISED   %s" $opt $detail]
+        # errorCode sometimes carries the tag when the message does not. Free to
+        # print, and if it ever does this probe becomes definitive.
+        if {[info exists ::errorCode] && $::errorCode ne "NONE"} {
+            puts [format "%-28s code     %s" $opt $::errorCode]
+        }
+    } else {
+        if {[catch {getOptMode -$opt} got]} { set got "(set, unreadable)" }
+        puts [format "%-28s ACCEPTED, reads back %s" $opt $got]
+    }
+    puts ""
 }
-puts "### supported here: $SUPPORTED"
+
+puts "### ####################################################"
+puts "### HOW TO READ THIS"
+puts "###"
+puts "### -opt_setup_target_slack is the name innovus.tcl tries first."
+puts "### If its error above is IMPOPT-581, that is the expected result for a"
+puts "### probe with no design and the sweep is good to go:"
+puts "###"
+puts "###     bash sweep.sh confirm 4.1 0.06"
+puts "###"
+puts "### If its error is IMPTCM-48, the name is wrong on this build. Do NOT"
+puts "### start the sweep; report the output and the usage list Innovus dumps."
+puts "### ####################################################"
 puts ""
 
 exit
