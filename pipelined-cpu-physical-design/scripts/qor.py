@@ -37,7 +37,7 @@ KEEP = [
     # Timing coverage. 45 and 46 are taken by DRC and connectivity, which are
     # copied in below from the run directory rather than from reports/, so they
     # are not in this list and the numbers still collide if reused.
-    "47_check_timing.rpt", "48_analysis_coverage.rpt",
+    "47_check_timing.rpt", "48_analysis_coverage.rpt", "54_antenna.rpt",
 ]
 
 # The three reporting corners, in the order they are printed. These are the
@@ -59,7 +59,7 @@ KEEP += ["41_hold_%s.rpt" % t for t in CORNERS]
 # because those were signed off at typical and the slow column is the penalty
 # they were never judged by.
 FIELDS = [
-    "run", "note", "clk_ns", "util", "effort", "target_slack", "date",
+    "run", "note", "clk_ns", "util", "effort", "target_slack", "derate", "date",
     "wns_place", "wns_cts", "wns_hold_cts", "wns_setup", "wns_hold",
     "n_setup_viol", "n_hold_viol", "tns_setup",
     "cells", "fillers", "flops",
@@ -424,6 +424,29 @@ def parse_target_slack(run_dir):
     return 0.0
 
 
+def parse_derate(run_dir):
+    """
+    The on-chip-variation derate the run was JUDGED at, out of RUN.env.
+
+    Every run before 2026-08-12 reads back as 0, which is what they used:
+    setAnalysisMode -analysisType onChipVariation was on and there was no
+    set_timing_derate anywhere, so the mode carried no margin at all.
+
+    THIS COLUMN IS THE QUALIFIER ON EVERY FREQUENCY IN THE TABLE. A number
+    signed off at 0 derate and one signed off at 5% are not comparable, and
+    the gap between them is exactly what on-chip variation costs.
+    """
+    text = _read(Path(run_dir) / "RUN.env")
+    if text:
+        m = re.search(r"TIMING_DERATE=([0-9.]+)", text)
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                pass
+    return 0.0
+
+
 def parse_clock(run_dir):
     """
     Clock period out of the SDC Genus wrote, which is the one Innovus used.
@@ -517,6 +540,7 @@ def parse_run(run_dir):
     row["util"] = parse_util(run_dir)
     row["effort"] = parse_effort(run_dir)
     row["target_slack"] = parse_target_slack(run_dir)
+    row["derate"] = parse_derate(run_dir)
     row["date"] = _gen_date(rpt / "44_summary.rpt") or ""
 
     return {k: ("" if v is None else v) for k, v in row.items()}
@@ -688,13 +712,13 @@ def write_markdown(rows, md_path):
     # 50 setup and exactly 50 hold, which was -max_paths 50 and not a count.
     # The true figure was 362 failing paths and -82.8 ns of TNS.
     head = (
-        "| Run | Clk | Util | Effort | TgtSlk | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
-        "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
+        "| Run | Clk | Util | Effort | TgtSlk | OCV | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |\n"
+        "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
     )
     lines = []
     for r in rows:
         lines.append(
-            "| `{run}` | {clk} | {util} | {eff} | {tgt} | {ws} | {ts} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
+            "| `{run}` | {clk} | {util} | {eff} | {tgt} | {ocv} | {ws} | {ts} | {ns} | {wh} | {nh} | {cells} | {den} | {wire} | {note} |".format(
                 run=r.get("run", "?"),
                 clk=_fmt(r.get("clk_ns"), 2),
                 util=_fmt(r.get("util"), 2),
@@ -702,6 +726,8 @@ def write_markdown(rows, md_path):
                 # 0 is a result, not missing data: it says this run stopped at
                 # zero slack, which is what every run before 2026-08-12 did.
                 tgt=_fmt(r.get("target_slack") or 0, 3),
+                # 0 is a result: this run was judged with no OCV margin at all.
+                ocv=_fmt(r.get("derate") or 0, 3),
                 ws=_fmt(r.get("wns_setup")),
                 ts=_fmt(r.get("tns_setup"), 1),
                 ns=_viol(r.get("n_setup_viol")),

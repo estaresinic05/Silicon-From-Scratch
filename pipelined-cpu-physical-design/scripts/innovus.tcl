@@ -307,6 +307,55 @@ if {$TARGET_SLACK != 0} {
 # trade against, an OCV or SI surprise on a min-delay path is uncorrectable
 # after tapeout, and buffers are cheap.
 #--------------------------------------------------------------------------
+#--------------------------------------------------------------------------
+# ON-CHIP VARIATION DERATES
+#
+# setAnalysisMode -analysisType onChipVariation has been on since MMMC
+# landed, and until now it had NOTHING TO APPLY. OCV is the mode; the derate
+# is the margin. Enabling one without the other is a analysis that looks
+# pessimistic in the log and is not.
+#
+# What it models: two gates on the same die, at the same corner, do not have
+# the same delay. Process gradients, local voltage droop and temperature
+# differences make one slower than its neighbour, and a launch path and a
+# capture path can sit at opposite ends of that spread. A flat derate says
+# "assume the late path is N% slower and the early path N% faster than the
+# library says". Production flows use AOCV or POCV tables, which vary the
+# derate by path depth and cell type; a flat number is the honest academic
+# stand-in and is what the library supports.
+#
+# TWO SEPARATE QUESTIONS, and running them together answers neither. Applied
+# with --from report on a netlist that already exists, this measures WHAT OCV
+# COSTS. Applied to a full run, it measures what building for it wins back.
+# That is the same split the flow already makes between --timing and
+# --syn-corner, for the same reason.
+#
+# 0 is off and is every run before 2026-08-12. 0.05 is a reasonable flat
+# figure for a 45 nm academic library. EXPECT THE FREQUENCY TO DROP: that is
+# the point, and a number quoted without a derate is quietly optimistic.
+#--------------------------------------------------------------------------
+if {[info exists env(TIMING_DERATE)]} {
+    set TIMING_DERATE $env(TIMING_DERATE)
+} else {
+    set TIMING_DERATE 0
+}
+
+if {$TIMING_DERATE != 0} {
+    set EARLY [expr {1.0 - $TIMING_DERATE}]
+    set LATE  [expr {1.0 + $TIMING_DERATE}]
+    if {[catch {set_timing_derate -early $EARLY -late $LATE} msg]} {
+        puts "### ####################################################"
+        puts "### set_timing_derate REFUSED: $msg"
+        puts "### TIMING_DERATE=$TIMING_DERATE was asked for and NOT applied."
+        puts "### Refusing to build: the run would be named for margin it lacks."
+        puts "### ####################################################"
+        exit 1
+    }
+    puts "### OCV derate applied: early $EARLY, late $LATE (+/- $TIMING_DERATE)"
+} else {
+    puts "### OCV derate 0 (analysis mode is onChipVariation but carries no margin)"
+}
+
 set HOLD_TARGET_SLACK 0.08
 if {[catch {setOptMode -opt_hold_target_slack $HOLD_TARGET_SLACK} msg]} {
     puts "### ####################################################"
@@ -515,13 +564,32 @@ saveDesign enc/06_final.enc
 # The simulator gets its cell behaviour from the Nangate Verilog models
 # instead, and a stub definition here would collide with the real one.
 # Physical-only cells are already absent: a filler has no function to simulate.
+# NO COMMENTS INSIDE THE LIST BELOW. `[list ...]` is a command, not syntax: a
+# `#` line inside it becomes a list ELEMENT, which silently shifts every
+# label/command pair after it by one. Tcl will not complain. Notes go here.
+#
+# power: -outfile, NOT a shell redirect. report_power writes through its own
+# file argument and prints nothing useful to stdout, so `> file` produced a
+# ZERO BYTE report on every run this flow has ever done. It existed, was
+# archived, was committed, and was empty -- the same shape as every other
+# silent-success bug here, and the reason this project has area and
+# performance numbers and no power number. Without switching activity the
+# dynamic figure is an estimate at default toggle rates and the leakage figure
+# is real; say which is which when quoting it.
+#
+# antenna: verify_connectivity runs with -no_antenna, so nothing in this flow
+# has ever checked antenna rules. A long metal segment connected to a gate
+# collects charge during plasma etch and can destroy the oxide before the
+# protection diode is connected. Every real tapeout checks it; it is one
+# command.
 foreach {label cmd} [list \
     "connectivity" {verify_connectivity -error 0 -geom_connect -no_antenna} \
     "drc"          {verify_drc -limit 100} \
     "setup"        {report_timing -late  -max_paths 50 -nworst 1 > reports/40_final_setup.rpt} \
     "hold"         {report_timing -early -max_paths 50 -nworst 1 > reports/41_final_hold.rpt} \
     "area"         {report_area  > reports/42_final_area.rpt} \
-    "power"        {report_power > reports/43_final_power.rpt} \
+    "power"        {report_power -outfile reports/43_final_power.rpt} \
+    "antenna"      {verifyProcessAntenna -reportfile reports/54_antenna.rpt} \
     "summary"      {summaryReport -noHtml -outfile reports/44_summary.rpt} \
 ] {
     if {[catch {eval $cmd} msg]} {

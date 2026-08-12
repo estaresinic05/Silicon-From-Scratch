@@ -7,6 +7,7 @@
 #   ./run.sh --period 4.0 --util 0.80        ...at 80% core utilization
 #   ./run.sh --period 4.1 --effort high      ...synthesise at high effort
 #   ./run.sh --period 4.1 --target-slack 0.06  ...optimise to +60 ps, not to 0
+#   ./run.sh --name X --from report --derate 0.05  ...what does OCV cost?
 #   ./run.sh --period 4.0 --artifacts        ...also write DEF, netlist, SDF, GDS
 #   ./run.sh --name baseline --note "..."    name the run yourself
 #   ./run.sh --name baseline --from cts      resume an existing run at CTS
@@ -66,6 +67,9 @@ EFFORT=medium
 # See the long note in scripts/innovus.tcl for why this is not clock uncertainty.
 TARGET_SLACK=0
 TS_EXPLICIT=0
+# Flat on-chip-variation derate. 0 is off, which is every run before
+# 2026-08-12. 0.05 means late paths 5% slower, early paths 5% faster.
+DERATE=0
 ARTIFACTS=0
 NAME=""
 FROM="syn"
@@ -82,7 +86,7 @@ usage() {
     # The line range is the comment block at the top of this file. It moves
     # whenever that block grows, and nothing catches it but reading the output,
     # so `./run.sh --help` is worth an eye after editing the header.
-    sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -795,6 +799,7 @@ while [ $# -gt 0 ]; do
         --util)   UTIL="$2";   shift 2 ;;
         --effort) EFFORT="$2"; shift 2 ;;
         --target-slack) TARGET_SLACK="$2"; TS_EXPLICIT=1; shift 2 ;;
+        --derate) DERATE="$2"; shift 2 ;;
         --artifacts) ARTIFACTS=1; shift ;;
         --name)   NAME="$2";   shift 2 ;;
         --from)   FROM="$2";   shift 2 ;;
@@ -823,6 +828,16 @@ esac
 # 4.1 ns clock. Innovus would accept that and spend a quarter of an hour
 # discovering it is unbuildable. Anything above a tenth of the period is a
 # typo, not an experiment, and is refused here for the price of a second.
+# A derate is a FRACTION, not a percentage: 0.05 is five percent. --derate 5
+# would ask for late paths six times slower and is a typo, not an experiment.
+awk -v d="$DERATE" 'BEGIN{
+    if (d !~ /^[0-9]+(\.[0-9]+)?$/) exit 1
+    exit !(d + 0 <= 0.5)
+}' || {
+    echo "--derate '$DERATE' must be a FRACTION between 0 and 0.5. Five percent is 0.05, not 5."
+    exit 1
+}
+
 awk -v t="$TARGET_SLACK" -v p="$PERIOD" 'BEGIN{
     if (t !~ /^[0-9]+(\.[0-9]+)?$/) exit 1
     exit !(t + 0 <= 0.1 * p)
@@ -854,12 +869,14 @@ if [ -z "$NAME" ]; then
     [ "$UTIL" = "0.70" ] || NAME="${NAME}_u$(echo "$UTIL" | tr -d '0.')"
     [ "$EFFORT" = "medium" ] || NAME="${NAME}_e${EFFORT}"
     [ "$TARGET_SLACK" = "0" ] || NAME="${NAME}_ts$(echo "$TARGET_SLACK" | sed 's/^0\.//')"
+    [ "$DERATE" = "0" ] || NAME="${NAME}_d$(echo "$DERATE" | sed 's/^0\.//')"
 fi
 
 export CLK_PERIOD="$PERIOD"
 export CORE_UTIL="$UTIL"
 export SYN_EFFORT="$EFFORT"
 export TARGET_SLACK="$TARGET_SLACK"
+export TIMING_DERATE="$DERATE"
 export WRITE_ARTIFACTS="$ARTIFACTS"
 
 RUNDIR="$ROOT/runs/$NAME"
@@ -881,7 +898,8 @@ if [ "$FROM" = "syn" ]; then
 CORE_UTIL=%s
 SYN_EFFORT=%s
 TARGET_SLACK=%s
-' "$PERIOD" "$UTIL" "$EFFORT" "$TARGET_SLACK" > RUN.env
+TIMING_DERATE=%s
+' "$PERIOD" "$UTIL" "$EFFORT" "$TARGET_SLACK" "$DERATE" > RUN.env
 elif [ -f RUN.env ]; then
     # Sourcing overwrites the shell's copy of anything RUN.env names, so the
     # command line's value has to be saved before it happens.
@@ -920,6 +938,7 @@ echo " clock   $PERIOD ns"
 echo " util    $UTIL"
 echo " effort  $EFFORT"
 echo " tgtslk  $TARGET_SLACK ns"
+echo " derate  +/- $DERATE"
 echo " from    $FROM"
 echo " dir     $RUNDIR"
 echo "=================================================================="
