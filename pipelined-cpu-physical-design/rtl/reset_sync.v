@@ -56,6 +56,7 @@ module reset_sync (
 
   reg stage1;
   reg stage2;
+  reg stage3_n;
 
   always @(posedge clk or posedge async_reset) begin
     if (async_reset) begin
@@ -67,7 +68,41 @@ module reset_sync (
     end
   end
 
-  assign sync_reset = stage2;
+  /* THE RELEASE LEAVES ON A FALLING EDGE, and that third flop is not
+     decoration. With release on the rising edge the deassertion reached the
+     flops 92 ps after the capture edge, and the removal check wants it held
+     for 134 ps: 119 paths failed at the fast corner by 61 ps. The reset was
+     too FAST, which is the opposite of every other timing problem here.
+
+     Innovus does not fix this on its own. Hold optimisation is enabled and it
+     closes data paths happily, but it will not insert delay on an async reset
+     net to satisfy removal; -opt_hold_target_slack 0.08 was applied and
+     returned a byte-identical design. That is a structural problem and it
+     wants a structural answer.
+
+     Releasing on the falling edge puts the deassertion half a period from
+     every capture edge: 2 ns at a 4 ns clock, against a 0.134 ns removal
+     requirement and a recovery requirement smaller still. Both checks pass
+     with three orders of magnitude of room rather than by 61 ps of arithmetic,
+     which is the kind of margin a reset network should have.
+
+     A negedge flop is exactly what reg_file.v was fixed to REMOVE, and the
+     distinction matters: there it sat on the read data path and gave away half
+     the clock on every instruction. Here it sits on a signal that changes once
+     at power-up and is never in a critical path, so the half cycle it spends
+     costs nothing at all.
+
+     Assertion is untouched. All three flops are forced high the instant
+     async_reset rises, so reset still asserts with no clock running. */
+  always @(negedge clk or posedge async_reset) begin
+    if (async_reset) begin
+      stage3_n <= 1'b1;
+    end else begin
+      stage3_n <= stage2;
+    end
+  end
+
+  assign sync_reset = stage3_n;
 
 
 endmodule
