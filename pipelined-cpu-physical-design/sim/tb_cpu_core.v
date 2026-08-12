@@ -519,9 +519,29 @@ module tb_cpu_core;
     rf_force;  // hold the register file at zero through reset
 `endif
 
-    @(negedge clk);
-    @(negedge clk);
+    // EIGHT CYCLES, NOT TWO.
+    //
+    // Two was enough while `reset` went straight from this port to the reset
+    // pin of every flop: assert it, wait a couple of edges, let go. reset_sync
+    // broke that assumption. The port now feeds a synchroniser, and the reset
+    // the design actually sees deasserts two clock edges after this line runs,
+    // three with the falling-edge release stage.
+    //
+    // A real reset is held for hundreds of cycles at power-up and no design
+    // depends on the exact number, so the two here was never a requirement --
+    // it was the smallest number that happened to work against a port-driven
+    // reset, and it stopped working the moment the reset gained latency.
+    //
+    // Eight leaves room for a deeper synchroniser without this needing to be
+    // touched again. It costs eight cycles of simulation time.
+    repeat (8) @(negedge clk);
     reset = 1'b0;
+
+    // AND WAIT FOR IT TO REACH THE DESIGN. Releasing the port is not releasing
+    // the design; the synchroniser still has to clock the deassertion through.
+    // rf_release below and the checker that follows both assume the CPU is
+    // running, and without this they start a few cycles too early.
+    repeat (4) @(negedge clk);
 
 `ifdef GATE_SIM
     rf_release;
