@@ -6,6 +6,9 @@
 Slacks are nanoseconds, worst path, post-route unless the column says
 otherwise. A negative setup WNS means the run did not make timing at
 that clock. Frozen reports for every run are in `results/<run>/reports/`.
+A hold count marked `!` contradicts its own WNS: the signoff summary counts
+hold checks and not removal ones, so read the per-corner table below for the
+real figure.
 
 | Run | Clk | Util | Effort | TgtSlk | Setup WNS | Setup TNS | Setup viol | Hold WNS | Hold viol | Cells | Density | Wire | Note |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
@@ -47,7 +50,8 @@ that clock. Frozen reports for every run are in `results/<run>/reports/`.
 | `confirm-clk4p0-u72-ts06` | 4.00 | 0.72 | medium | 0.060 | 0.002 | 0.0 | 0 | 0.015 | 0 | 5,266 | 74.3% | 87,413 | closure repeatability probe at 4.0 ns, target slack 0.06 ns |
 | `confirm-clk4p0-u71-ts06` | 4.00 | 0.71 | medium | 0.060 | 0.014 | 0.0 | 0 | 0.026 | 0 | 5,319 | 73.9% | 86,520 |  |
 | `fmax2-clk3p4` | 3.40 | 0.70 | medium | 0.000 | -0.466 | -2.8 | 15 | -0.061 | 27 | 5,698 | 74.4% | 86,889 |  |
-| `rstsync2-clk4p0-u71` | 4.00 | 0.71 | medium | 0.060 | 0.032 | 0.0 | 0 | -0.061 | 0 | 5,248 | 73.4% | 84,604 | reset synchroniser plus 80 ps hold margin |
+| `rstsync2-clk4p0-u71` | 4.00 | 0.71 | medium | 0.060 | 0.032 | 0.0 | 0 | -0.061 | 0 ! | 5,248 | 73.4% | 84,604 | reset synchroniser plus 80 ps hold margin |
+| `rstneg-clk4p0-u71` | 4.00 | 0.71 | medium | 0.060 | 0.020 | 0.0 | 0 | 0.026 | 0 | 5,265 | 73.5% | 85,136 | reset released on the falling edge |
 
 ## By corner
 
@@ -181,6 +185,9 @@ column against a corner column and never against the table above.
 | `rstsync2-clk4p0-u71` | 4.00 | `slow  SS 0.95V 125C` | 0.032 | 0.0 | 0 | -0.477 | 190 |
 |  |  | `typ   TT 1.10V  25C` | 2.159 | 0.0 | 0 | -0.114 | 179 |
 |  |  | `fast  FF 1.25V   0C` | 2.368 | 0.0 | 0 | -0.061 | 119 |
+| `rstneg-clk4p0-u71` | 4.00 | `slow  SS 0.95V 125C` | 0.020 | 0.0 | 0 | 0.208 | 0 |
+|  |  | `typ   TT 1.10V  25C` | 1.476 | 0.0 | 0 | 0.056 | 0 |
+|  |  | `fast  FF 1.25V   0C` | 1.642 | 0.0 | 0 | 0.026 | 0 |
 
 ## Stage progression
 
@@ -228,3 +235,4 @@ problem is in synthesis, in placement, in the clock tree or in the routing.
 | `confirm-clk4p0-u71-ts06` | -0.018 | 0.008 | 0.014 | -0.026 | -0.006 |
 | `fmax2-clk3p4` | -0.565 | -0.456 | -0.466 | -0.109 | 0.010 |
 | `rstsync2-clk4p0-u71` | 0.020 | -0.002 | 0.032 | 0.022 | -0.034 |
+| `rstneg-clk4p0-u71` | 0.004 | 0.036 | 0.020 | -0.032 | 0.016 |
