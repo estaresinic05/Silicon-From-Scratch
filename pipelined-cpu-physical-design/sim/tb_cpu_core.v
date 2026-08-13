@@ -194,6 +194,33 @@ module tb_cpu_core;
     $dumpfile("sim/rtl.vcd");
 `endif
     $dumpvars(1, tb_cpu_core);
+
+    /* DEPTH 1 IS THE TESTBENCH AND NOTHING INSIDE THE DESIGN. That is why six
+       rounds of reset debugging never once looked at a waveform: +trace ran,
+       wrote a VCD, and the VCD could not contain the signal in question.
+
+       reset_sync survives synthesis as its own module, instance u_reset_sync,
+       in the RTL and in the routed netlist alike, so one hierarchical path
+       resolves on both sides and the two dumps can be compared signal for
+       signal. Dumping that scope alone rather than the whole core keeps a
+       gate-level trace small enough to move over SFTP, and it is the only
+       scope the reset question is asked in.
+
+       Guarded by +trace because a full-depth dump is a cost every ordinary
+       run would otherwise pay for a signal it is not looking at.
+
+       TWO LEVELS FROM u_cpu, not zero. Level one is the core's own nets,
+       level two is datapath and reset_sync. That stops short of descending
+       into the register file and the ALU, which in gates are thousands of
+       cells and would bury the answer in net names no RTL counterpart has.
+
+       The pipeline registers survive synthesis under their RTL names --
+       IFID_instr, IDEX_*, EXMEM_*, MEMWB_* are all present in the routed
+       netlist as datapath-scope nets -- so the same path resolves on both
+       sides and the stage where a bit first diverges can simply be read off
+       rather than inferred. Nine suspects were eliminated before anyone
+       measured this, which is the wrong order to work in. */
+    if ($test$plusargs("trace")) $dumpvars(2, tb_cpu_core.u_cpu);
   end
 
   // ======================================================================
@@ -537,11 +564,29 @@ module tb_cpu_core;
     repeat (8) @(negedge clk);
     reset = 1'b0;
 
-    // AND WAIT FOR IT TO REACH THE DESIGN. Releasing the port is not releasing
-    // the design; the synchroniser still has to clock the deassertion through.
-    // rf_release below and the checker that follows both assume the CPU is
-    // running, and without this they start a few cycles too early.
-    repeat (4) @(negedge clk);
+    // DO NOT WAIT HERE, AND THE FOUR CYCLES THAT USED TO BE ARE A LESSON.
+    //
+    // This carried `repeat (4) @(negedge clk)` from 12 August, added so the
+    // checker would not start before reset_sync had clocked the deassertion
+    // through. Against a synchronised reset that is harmless: the design idles
+    // for two and a half cycles after the port releases, so four cycles of
+    // waiting skips nothing but idle.
+    //
+    // Against a PORT-DRIVEN reset it is a bug. The design starts the instant
+    // the port releases, so the checker came up four cycles late, never saw
+    // instruction zero retire, and every observation after it lined up against
+    // the previous instruction's expectation. The signature is unmistakable and
+    // worth recognising on sight: DUT write N carries expected write N+1's
+    // value, all the way down, with the final oracle short exactly one register.
+    // It reads like a broken machine and it is a mistuned harness.
+    //
+    // Waiting zero is correct for BOTH configurations. Starting at release
+    // costs nothing when the reset is synchronised, because MEMWB_regWrite is
+    // held reset and no write can be observed during those idle cycles, and it
+    // is the only correct choice when the reset is not. A fixed cycle count
+    // here encodes an assumption about the reset network into the testbench,
+    // which is exactly what made this pair mismatch the moment the network
+    // changed underneath it.
 
 `ifdef GATE_SIM
     rf_release;

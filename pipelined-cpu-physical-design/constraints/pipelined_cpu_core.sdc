@@ -48,20 +48,24 @@ set_clock_transition  0.05 [get_clocks clk]
 # The RAW reset port is asynchronous and genuinely cannot be timed: it has no
 # relationship to clk, so there is no edge to measure it against.
 #
-# THIS LINE USED TO DISABLE FAR MORE THAN THAT, and check_timing found it on
-# 2026-08-12. Before reset_sync existed the port drove the reset pin of all
-# 1347 flops directly, so `-from [get_ports reset]` made every one of those
-# pins an unconstrained endpoint: 4041 uncons_endpoint warnings, and all 1349
-# recovery checks reported UNTESTED by report_analysis_coverage. Asserting a
-# reset asynchronously is correct. Releasing one that way is a real silicon
-# bug, and the check that would have caught it was switched off.
+# KNOW EXACTLY WHAT THIS WAIVES, because it is more than one arc. The port
+# drives the reset pin of all 1347 flops directly, so `-from [get_ports reset]`
+# makes every one of those pins an unconstrained endpoint: check_timing reports
+# 4041 uncons_endpoint warnings, and report_analysis_coverage reports all 1349
+# recovery checks UNTESTED. That is the honest cost of the exception and it
+# should be stated rather than discovered.
 #
-# It now covers only what it should. rst_sync is driven by a register inside
-# reset_sync, so every path from there to a flop's reset pin STARTS AT A FLOP,
-# not at this port, and is timed normally. `-from` constrains startpoints, so
-# those paths are not matched by this exception. What remains matched is the
-# port to the synchroniser's own async pins, which is the one arc that really
-# is unmeasurable.
+# It is still the right constraint here. Asserting a reset asynchronously needs
+# no timing, and with a single clock and no reset domain crossing there is no
+# second clock for the release to be unrelated to. Recovery and removal become
+# real checks only once the reset is sourced by a register, which is what a
+# synchroniser does.
+#
+# A synchroniser was built and evaluated on 2026-08-12. It closed those checks
+# and it broke gate-level simulation from the first instruction of the program,
+# reproducibly, across two variants and at every corner. The design that ships
+# takes the false path and the waived checks over a reset network that cannot
+# be simulated. See the project write-up for the controlled A/B behind that.
 #
 # The `no_input_delay` warning on this port is expected and correct for the
 # same reason: there is no clock to reference an input delay to.

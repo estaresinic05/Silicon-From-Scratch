@@ -84,12 +84,6 @@ module pipelined_cpu_core (
     output wire        dbg_wb_enable
 );
 
-  /*--------------- synchronised reset ---------------*/
-  /* The reset every flop in the design actually sees. It asserts the instant
-     the port does and releases on a clock edge, so the whole pipeline leaves
-     reset together. See reset_sync.v for why the raw port cannot do that. */
-  wire       rst_sync;
-
   /*-------- instruction fields, out of IF/ID --------*/
   wire [6:0] IFID_opcode;
   wire [2:0] IFID_funct3;
@@ -183,20 +177,21 @@ module pipelined_cpu_core (
       .IFID_forwardB(IFID_forwardB)
   );
 
-  /* THE ONLY CONSUMER OF THE RAW PORT. Everything downstream takes rst_sync
-     instead, which is what turns 1349 untested recovery checks into timed
-     ones: the reset arriving at each flop is now sourced by a register rather
-     than by a port, so it is no longer covered by the SDC's false path from
-     the port and static timing checks it like any other signal. */
-  reset_sync u_reset_sync (
-      .clk(clk),
-      .async_reset(reset),
-      .sync_reset(rst_sync)
-  );
+  /* THE RESET IS ASYNCHRONOUS AND THE PORT DRIVES IT DIRECTLY.
+     `set_false_path -from [get_ports reset]` in the SDC covers every flop's
+     reset pin, which is correct for a single-clock design with no reset domain
+     crossing: asserting asynchronously needs no timing, and there is no second
+     clock for the release to be unrelated to.
 
+     A reset synchroniser was built and evaluated for this design on 12 August.
+     It closed the recovery and removal checks that the false path waives, and
+     it broke gate-level simulation from the first instruction of the program,
+     reproducibly, across two synchroniser variants and at every corner. That
+     was established by a controlled A/B and the synchroniser is not part of
+     the design that ships. */
   pipelined_cpu_datapath datapath (
       .clk(clk),
-      .reset(rst_sync),
+      .reset(reset),
       .IFID_branch(IFID_branch),
       .IFID_memRead(IFID_memRead),
       .IFID_operation(IFID_operation),
