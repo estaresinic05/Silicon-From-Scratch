@@ -23,6 +23,7 @@ import argparse
 import os
 import re
 import sys
+from pathlib import Path
 
 try:
     from docx import Document
@@ -62,17 +63,26 @@ def rpt(run, name):
         return f.read()
 
 
-def first_slack(text):
-    """First 'Slack Time' figure in a report_timing output.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from qor import _first_slack as _qor_slack  # noqa: E402
 
-    The leading '=' is optional and that is not cosmetic: setup reports write
-    '= Slack Time' as the last line of an arithmetic block, hold reports write
-    a bare 'Slack Time'. A regex anchored on the '=' silently returns nothing
-    for every hold corner, which reads as a missing number rather than as a
-    parsing bug.
+
+def slack(run, name):
+    """Worst-path slack from a timing report, formatted for the document.
+
+    THIS DELEGATES TO qor.py RATHER THAN CARRYING A SECOND COPY OF THE REGEX,
+    and the reason is a bug this file had for exactly one build. Setup reports
+    write '= Slack Time' as the last line of an arithmetic block; hold reports
+    write a bare 'Slack Time'. A pattern anchored on the '=' returns nothing
+    for every hold corner and renders as 'n/a', which reads as a figure that
+    does not exist rather than as a parser that is broken.
+
+    qor.py had already solved that, in a sibling file in this directory, with a
+    docstring explaining it. Re-deriving it here cost a build and produced the
+    identical expression. One parser, one place.
     """
-    m = re.search(r"^\s*=?\s*Slack Time\s+(-?[\d.]+)", text, re.M)
-    return m.group(1) if m else "n/a"
+    v = _qor_slack(Path(ROOT) / "results" / run / "reports" / name)
+    return "n/a" if v is None else f"{v:.3f}"
 
 
 def harvest(run):
@@ -80,11 +90,11 @@ def harvest(run):
     d = {"run": run}
 
     for corner in ("slow", "typ", "fast"):
-        d[f"setup_{corner}"] = first_slack(rpt(run, f"40_setup_{corner}.rpt"))
-        d[f"hold_{corner}"] = first_slack(rpt(run, f"41_hold_{corner}.rpt"))
+        d[f"setup_{corner}"] = slack(run, f"40_setup_{corner}.rpt")
+        d[f"hold_{corner}"] = slack(run, f"41_hold_{corner}.rpt")
 
-    d["setup_signoff"] = first_slack(rpt(run, "40_final_setup.rpt"))
-    d["hold_signoff"] = first_slack(rpt(run, "41_final_hold.rpt"))
+    d["setup_signoff"] = slack(run, "40_final_setup.rpt")
+    d["hold_signoff"] = slack(run, "41_final_hold.rpt")
 
     drc = rpt(run, "45_drc.rpt")
     d["drc"] = "No DRC violations were found" if "No DRC violations" in drc else "see 45_drc.rpt"
