@@ -8,6 +8,8 @@
 #   bash sweep.sh confirm 4.1 0.06 ...with the optimiser told to carry 60 ps
 #   bash sweep.sh confirm 4.25 0.06 0.05      ...and judged with 5% OCV derates
 #   bash sweep.sh confirm 4.25 0.06 0.05 "0.68 0.69 0.72 0.73"   ...on those utils
+#   bash sweep.sh tslack 4.25 0.05 how much optimisation margin is delivered,
+#                                  and where the design stops taking it
 #
 # A FILE, not a command to paste. Paste into the VNC xterm drops characters,
 # and it has already eaten a "--from" once.
@@ -172,6 +174,60 @@ case "$MODE" in
     done
     ;;
 
+  tslack)
+    # HOW MUCH OF THE MARGIN IS DELIVERED, AND WHERE DOES THE DESIGN STOP
+    # TAKING IT. This is the experiment that decides whether closure at a
+    # given period is reachable at all, and it replaces sweeping the clock.
+    #
+    # THE CLOCK IS THE WRONG KNOB AND THAT IS MEASURED, NOT ASSUMED. Above
+    # about 3.8 ns the tool tracks whatever period it is handed one for one,
+    # so 100 ps of extra clock bought 1 ps of extra slack. The 4.25 ns probe
+    # of 12 Aug landed at a mean ACHIEVED delay of 4.257 against a 4.250
+    # target: seven picoseconds past spec, which is the tracking signature and
+    # not a design pressed against its limit. Moving to 4.35 would almost
+    # certainly return the same seven picoseconds at a slower clock.
+    #
+    # Target slack is the knob that moves where the optimiser STOPS while
+    # leaving the ruler at the period, so it is the only one that can convert
+    # headroom into signoff margin. What is NOT known is how much of a request
+    # survives to signoff. At 4.1 ns with no derate, 60 ps of request became
+    # 27 ps of post-CTS gain, about 44%. At 4.25 with 5% derates, post-CTS
+    # came back at +8 ps against the same 60 ps request, which is either a
+    # much worse delivery rate or a design that has run out of road, and those
+    # two have completely different answers.
+    #
+    # THE LADDER TELLS THEM APART IN ONE RUN. Read achieved delay, period
+    # minus signoff WNS, at each rung:
+    #
+    #   it keeps falling      -> margin is being delivered, keep climbing
+    #                            until signoff WNS clears the ~15 ps of
+    #                            run-to-run sigma by 2x, then vote on it
+    #   it goes FLAT          -> that value is the derated floor. No target
+    #                            slack will beat it and the period must move.
+    #
+    # One util for the whole ladder, because utilization is the noise source
+    # being deliberately excluded here. Each rung is a single deterministic
+    # sample carrying about +-15 ps of implied uncertainty, against rungs 60 ps
+    # apart, so the trend is readable and no individual rung is a result.
+    # The vote is `confirm` afterwards, at whichever rung wins.
+    PERIOD="${2:-}"
+    DR="${3:-0}"
+    U="${4:-0.71}"
+    TSLIST="${5:-0.12 0.18 0.24 0.30}"
+    [ -n "$PERIOD" ] || {
+        echo "usage: bash sweep.sh tslack <period> [derate] [util] [target-slacks]"; exit 1; }
+
+    DRTAG=""
+    [ "$DR" = "0" ] || DRTAG="-d$(echo "$DR" | sed 's/^0\.//')"
+
+    for t in $TSLIST; do
+        TS="$t"
+        run_one "$PERIOD" "$U" \
+                "tsweep-clk$(echo "$PERIOD" | tr '.' 'p')-u$(echo "$U" | tr -d '0.')-ts$(echo "$t" | sed 's/^0\.//')$DRTAG" \
+                "optimisation margin ladder at $PERIOD ns, derate $DR"
+    done
+    ;;
+
   *)
     echo "usage:"
     echo "   bash sweep.sh fmax             four runs, 2.5 to 3.8 ns, read ACHIEVED delay"
@@ -181,6 +237,10 @@ case "$MODE" in
     echo "                                  Pass the derate the number being"
     echo "                                  confirmed was measured with, or the"
     echo "                                  probe confirms a different design point."
+    echo "   bash sweep.sh tslack <period> [derate] [util] [target-slacks]"
+    echo "                                  four runs up the optimisation margin,"
+    echo "                                  read ACHIEVED delay: still falling means"
+    echo "                                  keep climbing, flat is the derated floor."
     exit 1
     ;;
 esac
@@ -194,6 +254,13 @@ echo
 echo "The table is results/QOR.md. Read the BY CORNER section: the slow"
 echo "column is signoff, and a run closes when its slow Setup WNS is positive"
 echo "with zero violations."
+echo
+echo "NOT ON A DERATED RUN. The BY CORNER census builds its own slow, typ and"
+echo "fast views at report time, AFTER set_timing_derate has been applied to"
+echo "WC and BC, so those three views carry no margin at all. On a run with"
+echo "--derate the slow column is the PRE-OCV number and reads about 200 ps"
+echo "too generous: ocv-clk4p25-u71 is +0.002 at signoff and +0.196 there."
+echo "Read the main table's Setup WNS column, which is the derated one."
 echo
 echo "FOR THE fmax MODE, THAT IS THE WRONG NUMBER TO READ. Compute the delay"
 echo "each run actually achieved, which is period minus slow Setup WNS:"
