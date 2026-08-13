@@ -6,6 +6,8 @@
 #   bash sweep.sh util 4.1         utilization curve at a 4.1 ns clock
 #   bash sweep.sh confirm 4.1      is a closure at 4.1 ns repeatable?
 #   bash sweep.sh confirm 4.1 0.06 ...with the optimiser told to carry 60 ps
+#   bash sweep.sh confirm 4.25 0.06 0.05      ...and judged with 5% OCV derates
+#   bash sweep.sh confirm 4.25 0.06 0.05 "0.68 0.69 0.72 0.73"   ...on those utils
 #
 # A FILE, not a command to paste. Paste into the VNC xterm drops characters,
 # and it has already eaten a "--from" once.
@@ -38,19 +40,25 @@ MODE="${1:-}"
 # knob and clock uncertainty is not.
 TS=0
 
+# OCV derate, as a FRACTION, for the modes that take one. 0 is the old
+# behaviour and it is not a neutral default: onChipVariation has been the
+# analysis mode since MMMC, so a run at 0 is judged in OCV mode carrying no
+# margin at all. A sweep meant to confirm a SIGNOFF number has to be handed
+# the same derate that number was measured with, or it confirms a different
+# design point than the one in the table. 5% cost 251 ps on 12 Aug.
+DR=0
+
 run_one() {
     local period="$1" util="$2" name="$3" note="$4"
     echo
     echo "##########################################################"
-    echo "### $name   period=$period ns   utilization=$util   tgtslk=$TS ns"
+    echo "### $name   period=$period ns   utilization=$util   tgtslk=$TS ns   derate=$DR"
     echo "##########################################################"
     date
-    if [ "$TS" = "0" ]; then
-        ./run.sh --period "$period" --util "$util" --name "$name" --note "$note"
-    else
-        ./run.sh --period "$period" --util "$util" --name "$name" --note "$note" \
-                 --target-slack "$TS"
-    fi
+    set -- --period "$period" --util "$util" --name "$name" --note "$note"
+    [ "$TS" = "0" ] || set -- "$@" --target-slack "$TS"
+    [ "$DR" = "0" ] || set -- "$@" --derate "$DR"
+    ./run.sh "$@"
 }
 
 case "$MODE" in
@@ -136,19 +144,31 @@ case "$MODE" in
     # the design sits on the boundary and a single run cannot be quoted.
     PERIOD="${2:-}"
     TS="${3:-0}"
-    [ -n "$PERIOD" ] || { echo "usage: bash sweep.sh confirm <period> [target-slack]"; exit 1; }
+    DR="${4:-0}"
+    UTILS="${5:-0.68 0.69 0.71 0.72}"
+    [ -n "$PERIOD" ] || { echo "usage: bash sweep.sh confirm <period> [target-slack] [derate] [utils]"; exit 1; }
 
     # THE RUN NAME HAS TO CARRY THE MARGIN. results/confirm-clk4p1-u68 and its
     # three siblings are the committed evidence of the 1-in-6 probe of 11 Aug.
     # Re-running this mode under the same four names rebuilds runs/ and then
     # archives over results/, and the measurement that established the 26 ps
     # route cost would be gone with no diff to notice it by.
+    #
+    # The derate tags for the same reason: a 4.25 ns probe at 5% and the same
+    # probe at 0 are different experiments and neither may overwrite the other.
     TSTAG=""
     [ "$TS" = "0" ] || TSTAG="-ts$(echo "$TS" | sed 's/^0\.//')"
+    DRTAG=""
+    [ "$DR" = "0" ] || DRTAG="-d$(echo "$DR" | sed 's/^0\.//')"
 
-    for u in 0.68 0.69 0.71 0.72; do
-        run_one "$PERIOD" "$u" "confirm-clk$(echo "$PERIOD" | tr '.' 'p')-u$(echo "$u" | tr -d '0.')$TSTAG" \
-                "closure repeatability probe at $PERIOD ns, target slack $TS ns"
+    # The util list is an argument because the four defaults are only
+    # independent samples if none of them has already been run at this exact
+    # configuration. Innovus is deterministic, so a repeat of an existing point
+    # returns its answer byte for byte and costs a quarter of the sweep to
+    # learn nothing. Substitute a util that has not been run instead.
+    for u in $UTILS; do
+        run_one "$PERIOD" "$u" "confirm-clk$(echo "$PERIOD" | tr '.' 'p')-u$(echo "$u" | tr -d '0.')$TSTAG$DRTAG" \
+                "closure repeatability probe at $PERIOD ns, target slack $TS ns, derate $DR"
     done
     ;;
 
@@ -156,8 +176,11 @@ case "$MODE" in
     echo "usage:"
     echo "   bash sweep.sh fmax             four runs, 2.5 to 3.8 ns, read ACHIEVED delay"
     echo "   bash sweep.sh util <period>    four runs, 0.60 to 0.85 utilization"
-    echo "   bash sweep.sh confirm <period> [target-slack]"
-    echo "                                  four runs at 0.68 to 0.72, a noise probe"
+    echo "   bash sweep.sh confirm <period> [target-slack] [derate] [utils]"
+    echo "                                  four runs at 0.68 to 0.72, a noise probe."
+    echo "                                  Pass the derate the number being"
+    echo "                                  confirmed was measured with, or the"
+    echo "                                  probe confirms a different design point."
     exit 1
     ;;
 esac
