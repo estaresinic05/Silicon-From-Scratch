@@ -34,11 +34,32 @@ Across all three corners, from one routed database:
 | Typical | +2.229 | 0 | +0.056 | 0 |
 | Fast (FF 1.25 V −40 °C) | +2.401 | 0 | +0.026 | 0 |
 
-**Every frequency here is qualified by its corner.** A typical-corner number for
-this design is roughly 2.2 ns of slack better and means something completely
-different. No OCV derates are applied; `IO_DELAY` is set to 0.30 × the clock
-period, which is an assumption rather than a measurement and is stated wherever
-a number is quoted.
+**Every frequency here is qualified by its corner and its derate.** A
+typical-corner number for this design is roughly 2.2 ns of slack better and
+means something completely different.
+
+Analysis runs in `onChipVariation` mode with derates at 1.0. The same netlist
+re-judged with **5% OCV derates gives −0.237 ns**, a cost of 251 ps, which is
+measured rather than estimated:
+
+| Derate | Setup WNS | Launch clock latency | Capture clock latency |
+|---|---|---|---|
+| 1.0 (as shipped) | **+0.014** | 0.031 | 0.066 |
+| ±5% | −0.237 | 0.060 | 0.034 |
+
+Roughly 220 ps of that is the data path slowing by 5%; the rest is the clock
+skew reversing sign, because OCV derates the launch clock late and the capture
+clock early. Recovering it is a target-slack problem rather than a clock-period
+one, which is what the optimisation-margin work in the project history explores.
+
+`IO_DELAY` is set to 0.30 × the clock period, which is an assumption rather than
+a measurement and is stated wherever a number is quoted.
+
+**A restored database does not reproduce the run's derate state.**
+`restoreDesign` initialises derates to the analysis mode's ±5% default rather
+than to the 1.0 the run used, so re-opening this design and re-timing it reports
+−0.237 until `set_timing_derate -early 1.0 -late 1.0` is issued. Worth knowing
+before concluding a signed-off design misses by 251 ps.
 
 ## Verification
 
@@ -84,6 +105,42 @@ Stated rather than omitted, because each has a specific cause:
   than with a reset network that cannot be simulated.
 - **IR drop analysis** with Voltus has not been run.
 - **DFT and scan insertion** are not implemented.
+
+## The layout
+
+![The routed die](docs/images/die-routed.png)
+
+The full die is 156.0 × 156.0 µm; the core where cells sit is 135.9 × 135.8 µm,
+97 standard cell rows of 1.4 µm each. The 10 µm border holds the power ring on
+metal8 and metal9 and nothing else. Five vertical stripes carry power into the
+core, and the blue horizontal lines are the metal1 VDD/VSS rails, one per row.
+
+Density is 73.9%, so about a quarter of the core is filler. It is not evenly
+spread: measured from the DEF, the upper-left region is 70% filler against 49%
+in the band right of centre, which is visible above as the areas where the blue
+power rails show through with little routing stacked on them. That is the placer
+minimising wirelength — connected logic clusters, and the slack collects
+furthest from the netlist's centre of gravity. Route overflow is 0.00% in both
+directions, so nothing was starved by it.
+
+![The critical path](docs/images/die-critical-path.png)
+
+The worst setup path, +0.014 ns, highlighted in yellow. It launches from
+`IFID_instr_reg[5]`, passes through the immediate generator, and then walks the
+carry chain of `pc_plus_imm` — the 32-bit ripple-carry adder that computes the
+branch target — before arriving at `IF_pc_reg[31]`. Sixty of its seventy-three
+instances are that carry chain.
+
+The shape in the picture is the structure of the adder. A ripple carry is
+linear, bit 0 feeding bit 1 feeding bit 2, so the placer lays it out as a line:
+`pc_plus_imm` occupies a column 18 µm wide spanning 95 µm of the core's height,
+hard against the right edge. The critical path is that column.
+
+![Standard cells at the routing level](docs/images/die-zoom.png)
+
+A 10 µm window into the cell rows. Blue horizontals are the metal1 power rails
+bounding each row, red verticals and green horizontals are signal routing on the
+layers above, and the small crossed squares are vias.
 
 ## Running the flow
 
