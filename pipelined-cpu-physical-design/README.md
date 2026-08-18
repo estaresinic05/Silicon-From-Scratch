@@ -9,7 +9,60 @@ physical implementation: the synthesis and place-and-route flow, the
 constraints, the testbench that runs a program on the routed netlist, and the
 reports for the design that shipped.
 
+<p align="center">
+  <img src="docs/images/die-routed.png" width="480" alt="The routed die">
+</p>
+
+<table align="center">
+<tr>
+<td align="center" width="330"><img src="docs/images/die-critical-path.png" height="300" alt="The critical path"></td>
+<td align="center" width="330"><img src="docs/images/die-zoom.png" height="300" alt="Standard cells at the routing level"></td>
+</tr>
+<tr>
+<td align="center"><sub>The worst setup path, +0.014 ns</sub></td>
+<td align="center"><sub>A 10 µm window into the cell rows</sub></td>
+</tr>
+</table>
+
 ---
+
+## The layout
+
+### The routed die
+
+The full die is 156.0 × 156.0 µm; the core where cells sit is 135.9 × 135.8 µm,
+97 standard cell rows of 1.4 µm each. The 10 µm border holds the power ring on
+metal8 and metal9 and nothing else. Five vertical stripes carry power into the
+core, and the blue horizontal lines are the metal1 VDD/VSS rails, one per row.
+
+Density is 73.9%, so about a quarter of the core is filler. It is not evenly
+spread: measured from the DEF, the upper-left region is 70% filler against 49%
+in the band right of centre, which is visible in the die shot above as the areas
+where the blue power rails show through with little routing stacked on them.
+That is the placer
+minimising wirelength — connected logic clusters, and the slack collects
+furthest from the netlist's centre of gravity. Route overflow is 0.00% in both
+directions, so nothing was starved by it.
+
+### The critical path
+
+The worst setup path, +0.014 ns, highlighted in yellow. It launches from
+`IFID_instr_reg[5]`, passes through the immediate generator, and then walks the
+carry chain of `pc_plus_imm` — the 32-bit ripple-carry adder that computes the
+branch target — before arriving at `IF_pc_reg[31]`. Sixty of its seventy-three
+instances are that carry chain.
+
+The shape in the critical path shot is the structure of the adder. A ripple
+carry is linear, bit 0 feeding bit 1 feeding bit 2, so the placer lays it out as
+a line:
+`pc_plus_imm` occupies a column 18 µm wide spanning 95 µm of the core's height,
+hard against the right edge. The critical path is that column.
+
+### Inside the cell rows
+
+A 10 µm window into the cell rows. Blue horizontals are the metal1 power rails
+bounding each row, red verticals and green horizontals are signal routing on the
+layers above, and the small crossed squares are vias.
 
 ## Result
 
@@ -106,42 +159,6 @@ Stated rather than omitted, because each has a specific cause:
 - **IR drop analysis** with Voltus has not been run.
 - **DFT and scan insertion** are not implemented.
 
-## The layout
-
-![The routed die](docs/images/die-routed.png)
-
-The full die is 156.0 × 156.0 µm; the core where cells sit is 135.9 × 135.8 µm,
-97 standard cell rows of 1.4 µm each. The 10 µm border holds the power ring on
-metal8 and metal9 and nothing else. Five vertical stripes carry power into the
-core, and the blue horizontal lines are the metal1 VDD/VSS rails, one per row.
-
-Density is 73.9%, so about a quarter of the core is filler. It is not evenly
-spread: measured from the DEF, the upper-left region is 70% filler against 49%
-in the band right of centre, which is visible above as the areas where the blue
-power rails show through with little routing stacked on them. That is the placer
-minimising wirelength — connected logic clusters, and the slack collects
-furthest from the netlist's centre of gravity. Route overflow is 0.00% in both
-directions, so nothing was starved by it.
-
-![The critical path](docs/images/die-critical-path.png)
-
-The worst setup path, +0.014 ns, highlighted in yellow. It launches from
-`IFID_instr_reg[5]`, passes through the immediate generator, and then walks the
-carry chain of `pc_plus_imm` — the 32-bit ripple-carry adder that computes the
-branch target — before arriving at `IF_pc_reg[31]`. Sixty of its seventy-three
-instances are that carry chain.
-
-The shape in the picture is the structure of the adder. A ripple carry is
-linear, bit 0 feeding bit 1 feeding bit 2, so the placer lays it out as a line:
-`pc_plus_imm` occupies a column 18 µm wide spanning 95 µm of the core's height,
-hard against the right edge. The critical path is that column.
-
-![Standard cells at the routing level](docs/images/die-zoom.png)
-
-A 10 µm window into the cell rows. Blue horizontals are the metal1 power rails
-bounding each row, red verticals and green horizontals are signal routing on the
-layers above, and the small crossed squares are vias.
-
 ## Running the flow
 
 Tools are not on `PATH` by default:
@@ -154,7 +171,7 @@ Then, from this directory:
 
 ```sh
 ./run.sh --period 4.0 --util 0.71 --target-slack 0.06 --artifacts \
-         --name confirm-clk4p0-u71-ts06
+         --name signoff-250mhz
 ```
 
 That is the exact configuration of the shipped design. It runs synthesis through
@@ -176,7 +193,7 @@ than at zero. It is the knob that made this design close repeatably; margin
 added to clock uncertainty instead would move the optimiser's target and the
 signoff requirement by the same amount and buy nothing.
 
-## Layout
+## Repository layout
 
 ```
 rtl/            the CPU, as synthesised

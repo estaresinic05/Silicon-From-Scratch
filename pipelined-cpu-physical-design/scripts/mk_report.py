@@ -2,7 +2,7 @@
 """
 Build the physical design report as a .docx.
 
-    python scripts/mk_report.py [--run confirm-clk4p0-u71-ts06]
+    python scripts/mk_report.py [--run signoff-250mhz]
 
 WHY THIS IS A SCRIPT AND NOT A DOCUMENT.
 
@@ -693,7 +693,7 @@ def build(run, out):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--run", default="confirm-clk4p0-u71-ts06")
+    ap.add_argument("--run", default="signoff-250mhz")
     ap.add_argument("--out", default=os.path.join(ROOT, "docs", "physical-design-report.docx"))
     a = ap.parse_args()
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
