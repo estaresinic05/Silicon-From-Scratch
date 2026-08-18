@@ -13,16 +13,15 @@ reports for the design that shipped.
   <img src="docs/images/die-routed.png" width="480" alt="The routed die">
 </p>
 
-<table align="center" width="100%">
-<tr>
-<td align="center" width="50%"><img src="docs/images/die-critical-path.png" height="430" alt="The critical path"></td>
-<td align="center" width="50%"><img src="docs/images/die-zoom.png" height="430" alt="Standard cells at the routing level"></td>
-</tr>
-<tr>
-<td align="center"><sub>The worst setup path, +0.014 ns</sub></td>
-<td align="center"><sub>A 10 µm window into the cell rows</sub></td>
-</tr>
-</table>
+<p align="center">
+  <img src="docs/images/die-critical-path.png" alt="The critical path"><br>
+  <sub>The worst setup path, +0.014 ns</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/die-zoom.png" alt="Standard cells at the routing level"><br>
+  <sub>A 10 µm window into the cell rows</sub>
+</p>
 
 ---
 
