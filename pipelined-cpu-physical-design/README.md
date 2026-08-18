@@ -160,13 +160,44 @@ Stated rather than omitted, because each has a specific cause:
 
 ## Running the flow
 
-Tools are not on `PATH` by default:
+### What you need
+
+| | |
+|---|---|
+| **Genus and Innovus** | On `PATH`. Source your site's Cadence setup, or add the `bin` directory of your install. Developed on 23.1 and 23.12. |
+| **The Nangate 45 enablement** | The `lib/`, `lef/` and `qrc/` tree. Set `NG45` to it. |
+| **Conformal LEC** | Optional, for `./run.sh lec`. It usually installs apart from Genus and Innovus. |
+| **Xcelium or Icarus Verilog** | Optional, for simulation. `xrun` is preferred and is required for the SDF tier; `iverilog` covers zero delay. Set `XRUN` if `xrun` is installed somewhere off `PATH`. |
+| **Python 3.6+ and `curl`** | For the QOR helpers and the two fetch commands. |
+
+The enablement is the one piece that is not a Cadence tool. Any Nangate 45
+install works as long as it carries `NangateOpenCellLibrary_typical.lib`, both
+LEFs and `qrc/NG45.tch`. If you do not have one, the tree this design was built
+against is in the MacroPlacement repository:
 
 ```sh
-export PATH=/apps/cadencedigital/r23/bin:$PATH
+git clone --depth 1 https://github.com/TILOS-AI-Institute/MacroPlacement
+export NG45=$PWD/MacroPlacement/Enablements/NanGate45
 ```
 
-Then, from this directory:
+`NG45` defaults to `$HOME/MacroPlacement/Enablements/NanGate45`, which is where
+that clone lands from your home directory. Set it to anything else and `run.sh`
+exports it, so `genus.tcl` and `innovus.tcl` read the same value. **They resolve
+it independently**, so a path given only to one of them is the failure worth
+knowing about.
+
+The stock enablement ships one Liberty corner. `./run.sh libs` fetches the slow
+and fast ones into `$NG45/lib/`, which is what makes the three-corner reporting
+above possible, so that directory has to be writable. Without them the flow
+still runs and the missing corners come back empty rather than wrong; preflight
+says so rather than letting an empty column read as a clean one.
+
+`./run.sh cells` fetches the Verilog cell models, which no enablement ships and
+which gate-level simulation needs.
+
+### The shipped configuration
+
+From this directory:
 
 ```sh
 ./run.sh --period 4.0 --util 0.71 --target-slack 0.06 --artifacts \
@@ -183,9 +214,14 @@ Other entry points:
 ./run.sh gls <run> [zero|typ|slow|fast]   # run it on the routed netlist
 ./run.sh lec <run> [syn|routed|gate]  # formal equivalence against the RTL
 ./run.sh --name <run> --from report   # re-report a routed run without re-routing
+./run.sh --from cts                   # resume an existing run at CTS
 ./run.sh libs                         # fetch the slow/typ/fast libraries
 ./run.sh cells                        # fetch the Verilog cell models
+./run.sh --help                       # every flag
 ```
+
+Preflight runs before the flow starts and names what is missing, so a bad
+environment fails in a second rather than part way through synthesis.
 
 `--target-slack` tells the optimiser to stop at a positive slack target rather
 than at zero. It is the knob that made this design close repeatably; margin

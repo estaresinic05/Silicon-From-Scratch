@@ -18,7 +18,14 @@
 # "did the memory get optimised away" question does not arise.
 #############################################################################
 
-set NG45    $env(HOME)/MacroPlacement/Enablements/NanGate45
+# run.sh exports NG45. The default is only where a MacroPlacement clone lands,
+# so a hand-launched tool finds the same enablement the flow does. Checked
+# first, so a site with NG45 set but HOME unset does not fault on $env(HOME).
+if {[info exists env(NG45)]} {
+    set NG45 $env(NG45)
+} else {
+    set NG45 $env(HOME)/MacroPlacement/Enablements/NanGate45
+}
 set DESIGN  pipelined_cpu_core
 
 # Sources are read from the project root, results are written where we stand.

@@ -43,7 +43,15 @@ cd "$(dirname "$0")"
 ROOT=$(pwd)
 export PNR_ROOT="$ROOT"
 
-NG45=$HOME/MacroPlacement/Enablements/NanGate45
+# Where the Nangate45 enablement lives. The default is only where a
+# MacroPlacement clone puts it; an enablement you already have can be anywhere,
+# so this honours $NG45 from the environment.
+#
+# EXPORTED, because genus.tcl and innovus.tcl resolve the same variable. A
+# value that only run.sh knew would pass preflight and then send the tools to a
+# different library, which is worse than not being overridable at all.
+NG45=${NG45:-$HOME/MacroPlacement/Enablements/NanGate45}
+export NG45
 DESIGN=pipelined_cpu_core
 
 # nanoHUB has python3; a Windows laptop generally has only "python", and the
@@ -100,15 +108,19 @@ preflight() {
     for t in genus innovus; do
         if ! command -v $t >/dev/null 2>&1; then
             echo "MISSING: $t is not on your PATH."
-            echo "         try: ls /apps/cadencedigital/r23/bin"
+            echo "         source your site's Cadence setup, or add the bin"
+            echo "         directory of your install. On nanoHUB that is"
+            echo "         /apps/cadencedigital/r23/bin"
             fail=1
         fi
     done
 
     if [ ! -d "$NG45" ]; then
         echo "MISSING: the Nangate45 enablement is not at $NG45"
-        echo "         it comes from the MacroPlacement repo:"
-        echo "         cd ~ && git clone --depth 1 https://github.com/TILOS-AI-Institute/MacroPlacement"
+        echo "         point NG45 at one you already have:"
+        echo "           export NG45=/path/to/NanGate45"
+        echo "         or clone the one this was built against:"
+        echo "           cd ~ && git clone --depth 1 https://github.com/TILOS-AI-Institute/MacroPlacement"
         fail=1
     else
         for f in lib/NangateOpenCellLibrary_typical.lib \
@@ -210,7 +222,9 @@ run_lec() {
     [ -f "$netlist" ] || { echo "No netlist at $netlist"; exit 1; }
     command -v lec >/dev/null 2>&1 || {
         echo "MISSING: lec is not on your PATH."
-        echo "         try: export PATH=/apps/cadencedigital/r23/bin:\$PATH"
+        echo "         Conformal ships separately from Genus and Innovus and"
+        echo "         is often a different bin directory. Everything else in"
+        echo "         the flow runs without it."
         exit 1
     }
 
@@ -386,7 +400,9 @@ run_lec_gate() {
     [ -f "$routed" ] || { echo "No routed netlist at $routed"; exit 1; }
     command -v lec >/dev/null 2>&1 || {
         echo "MISSING: lec is not on your PATH."
-        echo "         try: export PATH=/apps/cadencedigital/r23/bin:\$PATH"
+        echo "         Conformal ships separately from Genus and Innovus and"
+        echo "         is often a different bin directory. Everything else in"
+        echo "         the flow runs without it."
         exit 1
     }
 
@@ -467,9 +483,10 @@ run_sim_rtl() {
 
     command -v iverilog >/dev/null 2>&1 || {
         echo "MISSING: neither iverilog nor xrun is available."
-        echo "         iverilog is the usual one on a laptop. On nanoHUB,"
-        echo "         Xcelium is in /apps/cadencedigital/r21/bin and this"
-        echo "         script finds it itself once that tree is reachable."
+        echo "         Put one on your PATH, or set XRUN to the xrun binary."
+        echo "         iverilog is the usual one on a laptop. Note that"
+        echo "         Xcelium often installs apart from Genus and Innovus,"
+        echo "         so having Cadence does not mean xrun is reachable."
         exit 1; }
 
     echo "    simulator: iverilog"
@@ -515,6 +532,9 @@ run_sim_rtl() {
 # certainly carries its own genus and innovus, and putting it first would
 # silently move the whole implementation flow two releases backwards.
 find_xrun() {
+    # An explicit path wins over both. Set XRUN when Xcelium is installed
+    # somewhere this function would never think to look.
+    if [ -n "${XRUN:-}" ] && [ -x "$XRUN" ]; then echo "$XRUN"; return; fi
     if command -v xrun >/dev/null 2>&1; then echo xrun; return; fi
     local c n best="" bestn=-1
     for c in /apps/cadencedigital/*/bin/xrun; do
@@ -715,8 +735,9 @@ run_gls() {
                 echo "          not a broken design, and it must not be reported as a result."
                 echo
                 echo "          Zero delay works everywhere:   ./run.sh gls $name"
-                echo "          The timing tier needs nanoHUB, where xrun lives in"
-                echo "          /apps/cadencedigital/r21/bin and run.sh finds it itself."
+                echo "          The timing tier needs Xcelium. Put xrun on your PATH"
+                echo "          or set XRUN to it; on nanoHUB it is in"
+                echo "          /apps/cadencedigital/r21/bin, which run.sh finds itself."
                 echo "          Override with +force_iverilog if you want to see it anyway."
                 exit 1
                 ;;
