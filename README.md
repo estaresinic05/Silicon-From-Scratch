@@ -185,6 +185,14 @@ Actively growing. Planned:
 
 This started as one person's exploration, and the goal is for it to be useful to others. If something is confusing, if you find a bug, or if you can explain a piece of it better, issues and contributions are welcome. A lesson that reads clearly to someone new is worth as much here as a fix to the RTL.
 
+## License
+
+The **designs and tooling** are MIT licensed, see [`LICENSE`](LICENSE): every
+`rtl/`, `sim/`, `scripts/` and `results/` directory is yours to clone, modify
+and build on. The **reports, READMEs, figures, logos and the Silicon From
+Scratch name** are all rights reserved, see
+[`LICENSE-CONTENT.md`](LICENSE-CONTENT.md).
+
 ## About
 
 I built these designs to deepen my own understanding of computer architecture and the full digital design flow, from a line of Verilog to a physical layout. Along the way it became clear the material could help anyone else curious about the field, which is what the site is for.
