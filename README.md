@@ -85,36 +85,12 @@ Each design ships a written **design verification report** ([single-cycle](./sin
 Every design is meant to be opened up and understood, not just run:
 
 - **RTL** — synthesizable Verilog/SystemVerilog for the datapath, control unit, register file, ALU and memory subsystem. The design itself.
-- **Testbenches** — self-checking verification environments, including lockstep comparison against an independent reference simulator and hand-derived final-state oracles. This is how you *prove* a design is correct instead of hoping.
+- **Testbenches** — self-checking verification environments, including lockstep comparison against an independent reference simulator and hand-derived final-state oracles. This is how you *prove* a design is correct instead of hoping. The pipelined CPU is held to the single-cycle design's expected-state table unchanged, so both processors are checked to end in the same architectural state, register for register and memory word for memory word.
 - **Waveforms** — VCD dumps and traces that let you watch the design behave cycle by cycle. Where the abstract becomes concrete.
 - **Programs** — RISC-V machine-code test programs exercising arithmetic, logic, memory and control flow. What the CPU actually runs.
 - **Design verification reports** — the full written argument for correctness, per CPU.
 
 The physical design project adds the layers below the RTL: the synthesis and place-and-route scripts, the SDC constraints, the committed timing, area, power and DRC reports for the run that shipped, and a gate-level testbench that runs the same program on the routed netlist with back-annotated delays.
-
-## The Two CPUs, Compared
-
-This is the most interesting thing in the repository, and it is the reason both CPUs exist rather than just the faster one.
-
-The two processors implement the same instruction subset and run the **same program image, byte for byte** — one generator writes both copies, so they cannot drift apart. Both were synthesized to Nangate45 45 nm standard cells with yosys, with abc measuring the longest register-to-register path against an identical driver and load. The memories are blackboxed, and their access time is the only estimated input.
-
-|  | Single-cycle | Pipelined |
-|---|---|---|
-| Clock period | 3473 ps | **1813 ps** |
-| Maximum frequency | 288 MHz | **552 MHz** |
-| Cell area | 10651 µm² | 14153 µm² (+33%) |
-| Cycles for the program | 34 | 48 |
-| **Runtime** | 118.1 ns | **87.0 ns** |
-
-**These are pre-layout numbers.** They come from logic synthesis alone, with no clock tree, no wire parasitics and no corner spread, so they answer *which architecture is faster* rather than *how fast this will run*. The pipelined design has since been taken through Cadence place and route in [`pipelined-cpu-physical-design/`](pipelined-cpu-physical-design/), where it closes at **250 MHz at the slow signoff corner**, with 2.2 ns of slack still in hand at typical. The comparison here is unaffected by that, because both designs were measured the same way as each other.
-
-A pipeline does not execute fewer instructions, and on a short program it does not even execute them in fewer cycles — it takes 14 more. It executes them in *shorter* cycles, and it has to win by enough on the clock to pay for the cycles it added. How much it needs is arithmetic: 48 / 34, or **1.41x**. It got **1.92x**, so the same program finishes **1.36x faster** for a third more silicon.
-
-The margin comes from where the memories sit. The single-cycle critical path crosses **both** memories inside one clock; no pipeline stage crosses more than one.
-
-Both architectural end states are identical, register for register and memory word for memory word. That is exactly the property pipelining has to preserve, and the pipelined testbench checks it against the single-cycle design's expected-state table unchanged.
-
-Each verification report documents the synthesis and timing flow that produced these numbers, and what it does and does not model.
 
 ## From RTL to Layout
 
@@ -192,7 +168,7 @@ The core RTL projects run on **free, open-source tools** — no licences, no cos
 - **GTKWave / EPWave** — waveform inspection
 - **yosys + abc**, with the Nangate45 library — synthesis and critical-path measurement
 
-The physical-design track uses the **Cadence suite** — Genus for synthesis, Innovus for place and route and static timing, Conformal LEC for equivalence checking, and Xcelium for gate-level simulation, against the free Nangate 45 nm open cell library. That is the professional toolchain, and it is useful to know it exists — but you need none of it to start, and none of it to learn the fundamentals. Everything above the layout, including the architectural comparison, was done with the open-source tools.
+The physical-design track uses the **Cadence suite** — Genus for synthesis, Innovus for place and route and static timing, Conformal LEC for equivalence checking, and Xcelium for gate-level simulation, against the free Nangate 45 nm open cell library. That is the professional toolchain, and it is useful to know it exists — but you need none of it to start, and none of it to learn the fundamentals. Everything above the layout was done with the open-source tools.
 
 ## Roadmap
 
@@ -213,4 +189,4 @@ This started as one person's exploration, and the goal is for it to be useful to
 
 I built these designs to deepen my own understanding of computer architecture and the full digital design flow, from a line of Verilog to a physical layout. Along the way it became clear the material could help anyone else curious about the field, which is what the site is for.
 
-*Recruiters and collaborators: this doubles as a portfolio of that work — the verification reports and the timing comparison above are the best places to start.*
+*Recruiters and collaborators: this doubles as a portfolio of that work — the verification reports and the physical design report above are the best places to start.*
